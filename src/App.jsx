@@ -433,40 +433,6 @@ function HomeScreen({nav,setSelectedDebt,profile,debts,notifs}){
 }
 
 // ─── FEED ────────────────────────────────────────────────────────────────────
-function FeedScreen({nav,myGames,friends}){
-  const icons={win:"🏆",loss:"💸",rank:"⚡",streak:"🔥"};
-  // Build a live feed from real myGames + static friend activity
-  const recentGames=myGames.slice(0,3).map(g=>({
-    id:`game-${g.id}`,type:g.net>=0?"win":"loss",player:"You",
-    amount:g.net,game:g.game,time:g.date,avatar:"Y",color:Gold,isYou:true,
-  }));
-  const allItems=[...recentGames,...ACTIVITY_FEED].sort((a,b)=>0); // keeps order
-  return(
-    <div style={{padding:"16px 20px"}}>
-      <BackBtn onClick={()=>nav(S.HOME)}/>
-      <div style={{color:Gold,fontSize:10,letterSpacing:3,textTransform:"uppercase",fontFamily:"monospace",marginBottom:4}}>Social</div>
-      <div style={{color:"#fff",fontSize:22,fontWeight:"bold",marginBottom:20}}>Friend Activity</div>
-      {allItems.map((item,idx)=>(
-        <div key={item.id||idx} style={{background:item.isYou?`${Gold}0a`:Card,borderRadius:16,padding:"14px 16px",marginBottom:10,border:`1px solid ${item.isYou?`${Gold}22`:Border}`,display:"flex",alignItems:"center",gap:14}}>
-          <div style={{position:"relative",flexShrink:0}}>
-            <Avatar char={item.avatar} color={item.color} size={44} fontSize={18}/>
-            <div style={{position:"absolute",bottom:-2,right:-2,width:20,height:20,borderRadius:"50%",background:Card,border:`1px solid ${Border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11}}>{icons[item.type]||"📌"}</div>
-          </div>
-          <div style={{flex:1}}>
-            <div style={{color:"#fff",fontSize:13,lineHeight:1.5}}>
-              <span style={{fontWeight:"bold",color:item.isYou?Gold:item.color}}>{item.isYou?"You":item.player}</span>
-              {item.type==="win"&&<span style={{color:"#888"}}> won <span style={{color:Up,fontWeight:"bold"}}>+${item.amount}</span>{item.game?` in ${item.game}`:""}</span>}
-              {item.type==="loss"&&<span style={{color:"#888"}}> lost <span style={{color:Down,fontWeight:"bold"}}>${Math.abs(item.amount)}</span>{item.game?` in ${item.game}`:""}</span>}
-              {item.type==="rank"&&<span style={{color:"#888"}}> ranked up to <span style={{color:Gold,fontWeight:"bold"}}>{item.rank}</span> 🎉</span>}
-              {item.type==="streak"&&<span style={{color:"#888"}}> is on a <span style={{color:Gold,fontWeight:"bold"}}>{item.streak}-game win streak</span> 🔥</span>}
-            </div>
-            <div style={{color:"#444",fontSize:11,marginTop:3}}>{item.time}</div>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 // ─── NOTIFICATIONS ───────────────────────────────────────────────────────────
 function NotificationsScreen({nav,notifs,markAllRead}){
