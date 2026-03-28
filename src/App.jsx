@@ -357,14 +357,15 @@ function MainContent({children,isMobile}){
   );
 }
 function PageHeader({title,subtitle,action}){
+  const isMobile=useIsMobile();
   return(
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:28}}>
-      <div>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:isMobile?20:28,flexWrap:"wrap",gap:10}}>
+      <div style={{minWidth:0,flex:1}}>
         <div style={{color:Gold,fontSize:11,letterSpacing:3,textTransform:"uppercase",fontFamily:"monospace",marginBottom:4}}>Sharkd</div>
-        <div style={{color:"#fff",fontSize:28,fontWeight:"bold"}}>{title}</div>
-        {subtitle&&<div style={{color:"#555",fontSize:14,marginTop:4}}>{subtitle}</div>}
+        <div style={{color:"#fff",fontSize:isMobile?20:28,fontWeight:"bold",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{title}</div>
+        {subtitle&&<div style={{color:"#555",fontSize:13,marginTop:4}}>{subtitle}</div>}
       </div>
-      {action}
+      {action&&<div style={{flexShrink:0}}>{action}</div>}
     </div>
   );
 }
@@ -374,33 +375,33 @@ function LandingPage({onLogin}){
   return(
     <div style={{background:BG,minHeight:"100vh",fontFamily:"'Georgia','Times New Roman',serif"}}>
       {/* Nav */}
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"20px 60px",borderBottom:`1px solid ${Border}`}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"16px 24px",borderBottom:`1px solid ${Border}`}}>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <span style={{fontSize:28}}>🦈</span>
-          <span style={{color:Gold,fontWeight:"bold",fontSize:22,letterSpacing:1}}>Sharkd</span>
+          <span style={{fontSize:24}}>🦈</span>
+          <span style={{color:Gold,fontWeight:"bold",fontSize:20,letterSpacing:1}}>Sharkd</span>
         </div>
-        <div style={{display:"flex",gap:12,alignItems:"center"}}>
-          <div onClick={onLogin} style={{color:"#888",fontSize:14,cursor:"pointer"}}>Sign in</div>
-          <Btn label="Get Started — Free" onClick={onLogin} size="sm"/>
+        <div style={{display:"flex",gap:10,alignItems:"center"}}>
+          <div onClick={onLogin} style={{color:"#888",fontSize:13,cursor:"pointer"}}>Sign in</div>
+          <Btn label="Get Started" onClick={onLogin} size="sm"/>
         </div>
       </div>
 
       {/* Hero */}
-      <div style={{textAlign:"center",padding:"100px 60px 80px",maxWidth:800,margin:"0 auto"}}>
-        <div style={{display:"inline-flex",alignItems:"center",gap:8,background:`${Gold}18`,border:`1px solid ${Gold}33`,borderRadius:20,padding:"6px 16px",marginBottom:24}}>
-          <span style={{fontSize:14}}>🦈</span>
-          <span style={{color:Gold,fontSize:13,fontWeight:"bold"}}>Track every game. Settle every debt.</span>
+      <div style={{textAlign:"center",padding:"60px 24px 48px",maxWidth:800,margin:"0 auto"}}>
+        <div style={{display:"inline-flex",alignItems:"center",gap:8,background:`${Gold}18`,border:`1px solid ${Gold}33`,borderRadius:20,padding:"6px 16px",marginBottom:20}}>
+          <span style={{fontSize:13}}>🦈</span>
+          <span style={{color:Gold,fontSize:12,fontWeight:"bold"}}>Track every game. Settle every debt.</span>
         </div>
-        <h1 style={{color:"#fff",fontSize:64,fontWeight:"bold",lineHeight:1.15,margin:"0 0 20px"}}>
+        <h1 style={{color:"#fff",fontSize:"clamp(32px,8vw,64px)",fontWeight:"bold",lineHeight:1.15,margin:"0 0 16px"}}>
           Home poker,<br/><span style={{color:Gold}}>made simple.</span>
         </h1>
-        <p style={{color:"#666",fontSize:20,lineHeight:1.7,marginBottom:40}}>
-          Log games, settle debts, track your stats, and climb the ranks. The only poker tracker built for your home game.
+        <p style={{color:"#666",fontSize:"clamp(14px,4vw,20px)",lineHeight:1.7,marginBottom:32,padding:"0 8px"}}>
+          Log games, settle debts, track your stats, and climb the ranks.
         </p>
         <div style={{display:"flex",gap:16,justifyContent:"center",alignItems:"center"}}>
           <div onClick={onLogin} style={{
             display:"flex",alignItems:"center",gap:12,background:"#fff",borderRadius:12,
-            padding:"14px 28px",cursor:"pointer",fontSize:16,fontWeight:"bold",color:"#111",
+            padding:"14px 24px",cursor:"pointer",fontSize:15,fontWeight:"bold",color:"#111",
             boxShadow:"0 4px 20px rgba(0,0,0,.3)",transition:"all .2s",
           }}>
             <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
@@ -411,7 +412,7 @@ function LandingPage({onLogin}){
       </div>
 
       {/* Features */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:24,padding:"0 60px 80px",maxWidth:1100,margin:"0 auto"}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))",gap:16,padding:"0 20px 60px",maxWidth:1100,margin:"0 auto"}}>
         {[
           {icon:"🃏",title:"Log Any Game",       body:"Enter buy-ins and cashouts. We settle who owes who instantly."},
           {icon:"⚡",title:"Settle Debts",        body:"Send payment requests. Everyone confirms. Done."},
@@ -429,7 +430,7 @@ function LandingPage({onLogin}){
       </div>
 
       {/* CTA */}
-      <div style={{textAlign:"center",padding:"60px",borderTop:`1px solid ${Border}`}}>
+      <div style={{textAlign:"center",padding:"48px 24px",borderTop:`1px solid ${Border}`}}>
         <div style={{color:"#fff",fontSize:32,fontWeight:"bold",marginBottom:16}}>Ready to track your game?</div>
         <div style={{color:"#555",fontSize:16,marginBottom:28}}>Join for free. No credit card required.</div>
         <div onClick={onLogin} style={{display:"inline-flex",alignItems:"center",gap:12,background:"#fff",borderRadius:12,padding:"14px 28px",cursor:"pointer",fontSize:16,fontWeight:"bold",color:"#111"}}>
@@ -594,14 +595,14 @@ function HomeScreen({nav,profile,debts,notifs,myGames,setSelectedDebt}){
       />
 
       {/* Top stats */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:16,marginBottom:28}}>
+      <div style={{display:"grid",gridTemplateColumns:isMobile?"repeat(2,1fr)":"repeat(4,1fr)",gap:isMobile?10:16,marginBottom:isMobile?20:28}}>
         <StatBox label="All-Time Net" value={`${allTime>=0?"+":""}$${allTime}`} color={allTime>=0?Up:Down}/>
         <StatBox label="You Owe" value={`$${youOwe}`} color={youOwe>0?Down:"#555"} sub={`${owing.length} pending`}/>
         <StatBox label="Owed to You" value={`$${owedToYou}`} color={owedToYou>0?Up:"#555"} sub={`${owed.length} pending`}/>
         <StatBox label="Your Rank" value={`${myRank.emoji} ${myRank.tier}`} color={myRank.color} sub={`${myScore.toFixed(1)}/10`}/>
       </div>
 
-      <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:20}}>
+      <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"2fr 1fr",gap:20}}>
         {/* Left column */}
         <div>
           {/* Pending actions */}
@@ -710,12 +711,31 @@ function NewGameScreen({nav,profile,friends,groups,addGame,showToast}){
   const [amounts,setAmounts]=useState({});
   const [focusedCell,setFocusedCell]=useState(null);
   const [showConfirm,setShowConfirm]=useState(false);
+  const [guestInput,setGuestInput]=useState("");
+  const [guests,setGuests]=useState([]);
+  const todayStr=new Date().toISOString().slice(0,10);
+  const [gameDate,setGameDate]=useState(todayStr);
+
+  const addGuest=()=>{
+    const name=guestInput.trim();
+    if(!name)return;
+    if(guests.find(g=>g.name.toLowerCase()===name.toLowerCase())||name.toLowerCase()==="you")return;
+    const g={name,username:"guest",color:"#888",initial:name[0].toUpperCase(),isGuest:true};
+    setGuests(prev=>[...prev,g]);
+    setSelected(prev=>{const n=new Set(prev);n.add(name);return n;});
+    setGuestInput("");
+  };
+  const removeGuest=name=>{
+    setGuests(prev=>prev.filter(g=>g.name!==name));
+    setSelected(prev=>{const n=new Set(prev);n.delete(name);return n;});
+  };
 
   const toggleFriend=name=>{if(name==="You")return;setSelected(prev=>{const n=new Set(prev);n.has(name)?n.delete(name):n.add(name);return n;});};
   const loadGroup=g=>{setSelectedGroupId(g.id);setSelected(new Set(["You",...g.members]));};
   const allCandidates=[
     {name:"You",username:`@${(profile?.username||"you").toLowerCase().replace(/\s/g,"_")}`,color:Gold,initial:(profile?.avatarChar||profile?.username?.[0]||"Y")},
     ...friends.map(f=>({name:f.name,username:`@${f.username}`,color:f.color,initial:f.avatar||f.name[0]})),
+    ...guests,
   ];
   const upd=(name,field,val)=>{
     const clean=val.replace(/[^0-9.]/g,"").replace(/^(\d*\.?\d{0,2}).*$/,"$1");
@@ -732,6 +752,7 @@ function NewGameScreen({nav,profile,friends,groups,addGame,showToast}){
   const balanced=totalBuyin>0&&totalBuyin===totalCashout;
   const txns=balanced?minimizeDebts(nets.map(n=>({name:n.name,netCents:n.netCents}))):[];
   const finalName=gameName.trim()||"Unnamed Game";
+  const displayDate=gameDate===todayStr?new Date().toLocaleDateString("en",{month:"short",day:"numeric"}):new Date(gameDate+"T12:00:00").toLocaleDateString("en",{month:"short",day:"numeric",year:gameDate.slice(0,4)!==todayStr.slice(0,4)?"numeric":undefined});
 
   return(
     <MainContent isMobile={isMobile}>
@@ -768,6 +789,14 @@ function NewGameScreen({nav,profile,friends,groups,addGame,showToast}){
                 </div>
               </div>
             )}
+            {/* Date picker */}
+            <div style={{marginBottom:20}}>
+              <div style={{color:"#555",fontSize:11,fontFamily:"monospace",letterSpacing:1,marginBottom:8}}>GAME DATE</div>
+              <input type="date" value={gameDate} onChange={e=>setGameDate(e.target.value)} max={todayStr}
+                style={{background:BG,border:`1.5px solid ${Border}`,borderRadius:12,padding:"12px 16px",color:"#fff",fontSize:15,outline:"none",colorScheme:"dark",width:"100%",boxSizing:"border-box"}}/>
+              {gameDate!==todayStr&&<div style={{color:Gold,fontSize:12,marginTop:6}}>⏪ Logging a past game: {displayDate}</div>}
+            </div>
+
             <div style={{color:"#555",fontSize:13,marginBottom:16}}>Select players for this game:</div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:10,marginBottom:20}}>
               {allCandidates.map(p=>{
@@ -783,6 +812,22 @@ function NewGameScreen({nav,profile,friends,groups,addGame,showToast}){
                   </div>
                 );
               })}
+            </div>
+            {/* Guest player input */}
+            <div style={{marginBottom:16}}>
+              <div style={{color:"#555",fontSize:11,fontFamily:"monospace",letterSpacing:1,marginBottom:8}}>ADD GUEST PLAYER (not on Sharkd)</div>
+              <div style={{display:"flex",gap:8}}>
+                <input value={guestInput} onChange={e=>setGuestInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addGuest()} placeholder="Enter their name..." style={{flex:1,background:BG,border:`1.5px solid ${Border}`,borderRadius:10,padding:"11px 14px",color:"#fff",fontSize:14,outline:"none",boxSizing:"border-box"}}/>
+                <div onClick={addGuest} style={{background:`${Gold}22`,border:`1px solid ${Gold}44`,borderRadius:10,padding:"11px 16px",color:Gold,fontWeight:"bold",fontSize:13,cursor:"pointer",whiteSpace:"nowrap"}}>+ Add</div>
+              </div>
+              {guests.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:10}}>
+                {guests.map(g=>(
+                  <div key={g.name} style={{display:"flex",alignItems:"center",gap:6,background:"#1a1a2e",border:"1px solid #333",borderRadius:20,padding:"4px 12px"}}>
+                    <span style={{color:"#aaa",fontSize:13}}>{g.name}</span>
+                    <span onClick={()=>removeGuest(g.name)} style={{color:"#555",fontSize:16,cursor:"pointer",lineHeight:1}}>×</span>
+                  </div>
+                ))}
+              </div>}
             </div>
             <div style={{color:"#555",fontSize:13,marginBottom:16}}>{selected.size} players selected</div>
             <div style={{opacity:selected.size>=2?1:0.4}}>
@@ -900,7 +945,7 @@ function NewGameScreen({nav,profile,friends,groups,addGame,showToast}){
                 </div>
                 <div style={{display:"flex",gap:12}}>
                   <Btn label="Cancel" onClick={()=>setShowConfirm(false)} outline/>
-                  <Btn label="✓ Confirm & Send" onClick={()=>addGame(finalName,activePlayers,nets,selectedGroupId)}/>
+                  <Btn label="✓ Confirm & Send" onClick={()=>addGame(finalName,activePlayers,nets,selectedGroupId,displayDate)}/>
                 </div>
               </div>
             )}
@@ -1550,15 +1595,7 @@ function FeedScreen({nav,feedItems}){
 
 // ─── ADD FRIENDS ─────────────────────────────────────────────────────────────
 function AddFriendsScreen({nav,showToast,friends}){
-  const isMobile=useIsMobile();  const [search,setSearch]=useState(""),[sent,setSent]=useState({});
-  const SAMPLE_USERS=[
-    {id:10,name:"Marcus", username:"marcus_cards", avatar:"M",color:"#a78bfa",mutual:2},
-    {id:11,name:"Priya",  username:"priya_bets",   avatar:"P",color:"#34d399",mutual:1},
-    {id:12,name:"Devon",  username:"devonallday",  avatar:"D",color:"#fb923c",mutual:3},
-    {id:13,name:"Zoe",    username:"zoe_raises",   avatar:"Z",color:"#f472b6",mutual:0},
-  ];
-  const friendIds=new Set(friends.map(f=>f.id));
-  const results=search?SAMPLE_USERS.filter(u=>u.name.toLowerCase().includes(search.toLowerCase())&&!friendIds.has(u.id)):SAMPLE_USERS.filter(u=>!friendIds.has(u.id));
+  const isMobile=useIsMobile();  const [search,setSearch]=useState("");
   return(
     <MainContent isMobile={isMobile}>
       <PageHeader title="Add Friends" subtitle="Find players to connect with"/>
@@ -1566,13 +1603,19 @@ function AddFriendsScreen({nav,showToast,friends}){
         <div style={{marginBottom:24}}>
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search by username..." autoFocus style={{width:"100%",background:Card,border:`1px solid ${Border}`,borderRadius:12,padding:"13px 16px",color:"#fff",fontSize:15,outline:"none",boxSizing:"border-box"}}/>
         </div>
-        {results.map(u=>(
-          <div key={u.id} style={{display:"flex",alignItems:"center",gap:12,padding:"14px 20px",background:Card,border:`1px solid ${Border}`,borderRadius:14,marginBottom:10}}>
-            <Avatar char={u.avatar} color={u.color} size={44} fontSize={18}/>
-            <div style={{flex:1}}><div style={{color:"#fff",fontWeight:"bold",fontSize:15}}>{u.name}</div><div style={{color:"#444",fontSize:12,fontFamily:"monospace"}}>@{u.username}</div>{u.mutual>0&&<div style={{color:"#555",fontSize:11,marginTop:2}}>{u.mutual} mutual friends</div>}</div>
-            <div onClick={!sent[u.id]?()=>{setSent(s=>({...s,[u.id]:true}));showToast(`✓ Request sent to ${u.name}!`);}:undefined} style={{background:sent[u.id]?`${Up}18`:`${Gold}18`,border:`1px solid ${sent[u.id]?`${Up}44`:`${Gold}44`}`,borderRadius:10,padding:"9px 18px",color:sent[u.id]?Up:Gold,fontSize:13,fontWeight:"bold",cursor:sent[u.id]?"default":"pointer",whiteSpace:"nowrap"}}>{sent[u.id]?"✓ Sent":"+ Add"}</div>
-          </div>
-        ))}
+        {search.length>0&&(
+          <Card2 style={{textAlign:"center",padding:"32px",marginBottom:16}}>
+            <div style={{fontSize:32,marginBottom:8}}>🔍</div>
+            <div style={{color:"#555",fontSize:14}}>No users found for "{search}"</div>
+            <div style={{color:"#444",fontSize:12,marginTop:6}}>Make sure you have the exact username</div>
+          </Card2>
+        )}
+        {search.length===0&&(
+          <Card2 style={{textAlign:"center",padding:"32px",marginBottom:16}}>
+            <div style={{fontSize:32,marginBottom:8}}>👥</div>
+            <div style={{color:"#555",fontSize:14}}>Search for a player by their Sharkd username</div>
+          </Card2>
+        )}
         <div style={{marginTop:20,background:Card,border:`1px solid ${Border}`,borderRadius:14,padding:"16px 20px",display:"flex",alignItems:"center",gap:14}}>
           <span style={{fontSize:28}}>🔗</span>
           <div style={{flex:1}}><div style={{color:"#fff",fontWeight:"bold",fontSize:15}}>Invite via link</div><div style={{color:"#555",fontSize:13,marginTop:2}}>Share your invite link with friends</div></div>
@@ -1823,8 +1866,8 @@ export default function App(){
   };
   const markAllRead=()=>setNotifs(prev=>prev.map(n=>({...n,read:true})));
 
-  const addGame=(gameName,activePlayers,nets,selectedGroupId)=>{
-    const now=new Date(),dateStr=now.toLocaleDateString("en",{month:"short",day:"numeric"});
+  const addGame=(gameName,activePlayers,nets,selectedGroupId,gameDate)=>{
+    const dateStr=gameDate||new Date().toLocaleDateString("en",{month:"short",day:"numeric"});
     const myNet=nets.find(n=>n.name==="You");
     const myNetDollars=myNet?Math.round(myNet.netCents/100):0;
     const newId=Date.now();
