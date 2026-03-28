@@ -166,11 +166,20 @@ function minimizeDebts(nets){
   while(ci<cr.length&&di<de.length){const c=cr[ci],d=de[di],amt=Math.min(c.netCents,-d.netCents);txns.push({from:d.name,to:c.name,amountCents:amt});c.netCents-=amt;d.netCents+=amt;if(c.netCents===0)ci++;if(d.netCents===0)di++;}
   return txns;
 }
+function parseGameDate(dateStr){
+  if(!dateStr)return new Date();
+  // Try ISO format first (2026-03-27)
+  if(/^\d{4}-\d{2}-\d{2}/.test(dateStr))return new Date(dateStr+"T12:00:00");
+  // Try "Mar 27" or "Mar 27, 2026" format
+  const withYear=dateStr.includes(",")?dateStr:dateStr+", "+new Date().getFullYear();
+  const d=new Date(withYear);
+  return isNaN(d)?new Date():d;
+}
 function buildChartFromGames(games,period){
   const now=new Date();
   const days={"1W":7,"1M":30,"3M":90,"1Y":365,"ALL":9999}[period]||30;
   const cutoff=new Date(now);cutoff.setDate(cutoff.getDate()-days);
-  const parsed=games.map(g=>({...g,ts:new Date(g.date)})).filter(g=>!isNaN(g.ts)&&g.ts>=cutoff).sort((a,b)=>a.ts-b.ts);
+  const parsed=games.map(g=>({...g,ts:parseGameDate(g.date)})).filter(g=>!isNaN(g.ts)&&g.ts>=cutoff).sort((a,b)=>a.ts-b.ts);
   if(!parsed.length)return[{label:"",value:0,date:cutoff}];
   let running=0;
   const pts=parsed.map(g=>{running+=g.net;return{label:g.ts.toLocaleDateString("en",{month:"short",day:"numeric"}),value:running,date:g.ts};});
@@ -987,11 +996,9 @@ function SettlementsScreen({nav,debts,settleDebt,showToast,settledHistory,setSel
                 ))}</>}
               {owed.length>0&&<><SectionLabel text="Owed to You" style={{marginTop:20}}/>
                 {owed.map(d=>(
-                  <div key={d.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"16px 20px",background:Card,border:`1px solid ${Up}33`,borderRadius:14,marginBottom:10}}>
-                    <div><div style={{color:"#fff",fontSize:15,fontWeight:"bold"}}>{d.from} → You</div><div style={{color:"#555",fontSize:12,marginTop:3}}>{d.game}</div></div>
-                    <div style={{textAlign:"right"}}><div style={{color:Up,fontSize:22,fontWeight:"bold"}}>${d.amount}</div>
-                      <div onClick={()=>{settleDebt(d.id);showToast(`✓ Confirmed $${d.amount} from ${d.from}!`);}} style={{color:d.status==="awaiting"?Gold:Up,fontSize:12,marginTop:4,cursor:"pointer"}}>{d.status==="awaiting"?"⏳ Awaiting confirmation":"✓ Confirm received"}</div>
-                    </div>
+                  <div key={d.id} onClick={()=>{settleDebt(d.id);showToast(`✓ Confirmed $${d.amount} from ${d.from}!`);}} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"16px 20px",background:Card,border:`1px solid ${Up}33`,borderRadius:14,marginBottom:10,cursor:"pointer"}}>
+                    <div><div style={{color:"#fff",fontSize:15,fontWeight:"bold"}}>{d.from} → You</div><div style={{color:"#555",fontSize:12,marginTop:3}}>{d.game}</div><div style={{color:Up,fontSize:12,marginTop:4}}>Tap anywhere to confirm received</div></div>
+                    <div style={{textAlign:"right"}}><div style={{color:Up,fontSize:22,fontWeight:"bold"}}>${d.amount}</div></div>
                   </div>
                 ))}</>}
             </>
@@ -1834,7 +1841,7 @@ function FriendProfileScreen({nav,friend,fromScreen,profile}){
 
 // ─── ROOT APP ─────────────────────────────────────────────────────────────────
 export default function App(){
-  const [page,setPage]=useState("landing");
+  const [page,setPage]=useState("loading");
   const [screen,setScreen]=useState(S.HOME);
   const [mobileOpen,setMobileOpen]=useState(false);
   const [selectedDebt,setSelectedDebt]=useState(null);
@@ -1855,6 +1862,29 @@ export default function App(){
   const [feedItems,setFeedItems]=useState([]);
   const [myGames,setMyGames]=useState([]);
   const [profile,setProfile]=useState({username:"",avatarChar:"♠",avatarColor:Gold,photo:null,isPublic:true,venmo:""});
+
+  useEffect(()=>{
+    const app=getFirebase();
+    if(!app){setPage("landing");return;}
+    const auth=window.firebase_auth?.getAuth(app);
+    if(!auth){setPage("landing");return;}
+    const unsub=window.firebase_auth.onAuthStateChanged(auth,async user=>{
+      if(user){
+        const existing=await loadUserProfile(user.uid);
+        if(existing&&existing.username){
+          setProfile(p=>({...p,...existing,uid:user.uid,photoURL:user.photoURL||"",email:user.email||""}));
+          const savedGames=await loadGames(user.uid);
+          if(savedGames.length>0)setMyGames(savedGames);
+          setPage("app");
+        }else{
+          setPage("login");
+        }
+      }else{
+        setPage("landing");
+      }
+    });
+    return()=>unsub();
+  },[]);
 
   const nav=s=>{setPrevScreen(screen);setScreen(s);};
   const showToast=msg=>{setToast(msg);setTimeout(()=>setToast(null),2600);};
@@ -1880,11 +1910,14 @@ export default function App(){
       results:nets.map(n=>({name:n.name,buyin:Math.round(n.buyinCents/100),cashout:Math.round(n.cashoutCents/100),net:Math.round(n.netCents/100)})),
       settled:false,groupId:selectedGroupId||null,
     };
-    setMyGames(prev=>[newGame,...prev]);
-    // Save to Firebase if user is logged in
-    if(profile.uid)saveGame(profile.uid,newGame);
     const txns=minimizeDebts(nets.map(n=>({name:n.name,netCents:n.netCents})));
-    const newDebts=txns.map((t,i)=>({id:newId+i+1,from:t.from,to:t.to,amount:Math.round(t.amountCents/100),status:"pending",game:gameName}));
+    // Guest players (not on Sharkd) auto-settle — only real friends need approval
+    const guestNames=new Set(activePlayers.filter(p=>p.isGuest).map(p=>p.name));
+    const newDebts=txns.filter(t=>!guestNames.has(t.from)&&!guestNames.has(t.to)).map((t,i)=>({id:newId+i+1,from:t.from,to:t.to,amount:Math.round(t.amountCents/100),status:"pending",game:gameName}));
+    const finalGame={...newGame,settled:newDebts.length===0};
+    setMyGames(prev=>[finalGame,...prev]);
+    // Save to Firebase if user is logged in
+    if(profile.uid)saveGame(profile.uid,finalGame);
     if(newDebts.length)setDebts(prev=>[...prev,...newDebts]);
     if(selectedGroupId)setGroups(prev=>prev.map(g=>g.id===selectedGroupId?{...g,lastGame:dateStr,games:g.games+1}:g));
     const newFeedItems=nets.map((n,i)=>({id:newId+1000+i,type:n.netCents>0?"win":"loss",player:n.name==="You"?(profile.username||"You"):n.name,amount:Math.round(n.netCents/100),game:gameName,time:"Just now",avatar:n.name==="You"?(profile.avatarChar||"Y"):n.name[0],color:n.name==="You"?(profile.avatarColor||Gold):friends.find(f=>f.name===n.name)?.color||"#888",isMe:n.name==="You"}));
@@ -1909,6 +1942,7 @@ export default function App(){
   const unreadCount=notifs.filter(n=>!n.read).length;
 
   // ── Routing ────────────────────────────────────────────────────────────────
+  if(page==="loading") return <div style={{background:BG,minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{textAlign:"center"}}><div style={{fontSize:48,marginBottom:16}}>🦈</div><div style={{color:Gold,fontSize:16,fontFamily:"monospace"}}>Loading...</div></div></div>;
   if(page==="landing") return <LandingPage onLogin={()=>setPage("login")}/>;
   if(page==="login") return <LoginPage onLogin={async(fullName,venmo,username,dob,uid,googleUser)=>{
     setProfile(p=>({...p,username,fullName,venmo,dob,uid,photoURL:googleUser?.photoURL||"",email:googleUser?.email||""}));
