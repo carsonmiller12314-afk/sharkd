@@ -23,5 +23,14 @@
   <body>
     <noscript>You need to enable JavaScript to run Sharkd.</noscript>
     <div id="root"></div>
+    <!-- Firebase SDKs -->
+    <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+      import * as firebaseAuth from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+      import * as firebaseFirestore from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+      window.firebase_app = { initializeApp };
+      window.firebase_auth = firebaseAuth;
+      window.firebase_firestore = firebaseFirestore;
+    </script>
   </body>
 </html>
