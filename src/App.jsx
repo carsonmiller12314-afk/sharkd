@@ -47,6 +47,50 @@ async function signOut(){
   }catch(e){console.error(e);}
 }
 
+async function signUpWithEmail(email,password){
+  try{
+    const app=getFirebase();if(!app)throw new Error("Firebase not loaded");
+    const auth=window.firebase_auth.getAuth(app);
+    const result=await window.firebase_auth.createUserWithEmailAndPassword(auth,email,password);
+    return{user:result.user,error:null};
+  }catch(e){
+    const msg=e.code==="auth/email-already-in-use"?"That email is already registered.":e.code==="auth/weak-password"?"Password must be at least 6 characters.":"Sign up failed. Please try again.";
+    return{user:null,error:msg};
+  }
+}
+async function signInWithEmail(emailOrUsername,password){
+  try{
+    const app=getFirebase();if(!app)throw new Error("Firebase not loaded");
+    const auth=window.firebase_auth.getAuth(app);
+    // If it looks like a username (no @domain), look up their email first
+    let email=emailOrUsername;
+    if(!emailOrUsername.includes("@")||emailOrUsername.startsWith("@")){
+      const username=emailOrUsername.replace(/^@/,"").toLowerCase();
+      const db=window.firebase_firestore.getFirestore(app);
+      const q=window.firebase_firestore.query(
+        window.firebase_firestore.collection(db,"users"),
+        window.firebase_firestore.where("username","==",username)
+      );
+      const snap=await window.firebase_firestore.getDocs(q);
+      if(snap.empty)return{user:null,error:"No account found with that username."};
+      email=snap.docs[0].data().email;
+    }
+    const result=await window.firebase_auth.signInWithEmailAndPassword(auth,email,password);
+    return{user:result.user,error:null};
+  }catch(e){
+    const msg=e.code==="auth/wrong-password"||e.code==="auth/invalid-credential"?"Incorrect password. Try again.":e.code==="auth/user-not-found"?"No account found with that email.":"Sign in failed. Please try again.";
+    return{user:null,error:msg};
+  }
+}
+async function sendPasswordReset(email){
+  try{
+    const app=getFirebase();if(!app)return;
+    const auth=window.firebase_auth.getAuth(app);
+    await window.firebase_auth.sendPasswordResetEmail(auth,email);
+    return true;
+  }catch(e){return false;}
+}
+
 async function saveUserProfile(uid,data){
   try{
     const app=getFirebase();
@@ -692,21 +736,82 @@ function LandingPage({onLogin}){
 
 // ─── LOGIN / SIGNUP ───────────────────────────────────────────────────────────
 function LoginPage({onLogin}){
-  const [step,setStep]=useState("google");
+  const [tab,setTab]=useState("signin");
+  // Sign in state
+  const [siInput,setSiInput]=useState("");
+  const [siPass,setSiPass]=useState("");
+  const [siLoading,setSiLoading]=useState(false);
+  const [siError,setSiError]=useState("");
+  // Sign up state
+  const [suFirst,setSuFirst]=useState("");
+  const [suLast,setSuLast]=useState("");
+  const [suEmail,setSuEmail]=useState("");
+  const [suUsername,setSuUsername]=useState("");
+  const [suUsernameStatus,setSuUsernameStatus]=useState(null);
+  const [suCheckingU,setSuCheckingU]=useState(false);
+  const [suPass,setSuPass]=useState("");
+  const [suPass2,setSuPass2]=useState("");
+  const [suDob,setSuDob]=useState("");
+  const [suVenmo,setSuVenmo]=useState("");
+  const [suLoading,setSuLoading]=useState(false);
+  const [suError,setSuError]=useState("");
+  // Google state
+  const [gLoading,setGLoading]=useState(false);
+  // Profile setup (for Google new users)
+  const [step,setStep]=useState("auth");
   const [googleUser,setGoogleUser]=useState(null);
-  const [firstName,setFirstName]=useState("");
-  const [lastName,setLastName]=useState("");
-  const [dob,setDob]=useState("");
-  const [venmo,setVenmo]=useState("");
-  const [username,setUsername]=useState("");
-  const [usernameFocus,setUsernameFocus]=useState(false);
-  const [usernameStatus,setUsernameStatus]=useState(null);
-  const [checking,setChecking]=useState(false);
-  const [signingIn,setSigningIn]=useState(false);
-  const [error,setError]=useState("");
+  const [profileFirst,setProfileFirst]=useState("");
+  const [profileLast,setProfileLast]=useState("");
+  const [profileUsername,setProfileUsername]=useState("");
+  const [profileUsernameStatus,setProfileUsernameStatus]=useState(null);
+  const [profileCheckingU,setProfileCheckingU]=useState(false);
+  const [profileVenmo,setProfileVenmo]=useState("");
+  const [profileDob,setProfileDob]=useState("");
+  // Forgot password
+  const [showForgot,setShowForgot]=useState(false);
+  const [forgotEmail,setForgotEmail]=useState("");
+  const [forgotSent,setForgotSent]=useState(false);
 
-  const handleGoogleSignIn=async()=>{
-    setSigningIn(true);setError("");
+  const checkUsername=async(val,setter,statusSetter,checkingSetter)=>{
+    const clean=val.toLowerCase().replace(/[^a-z0-9_]/g,"");
+    setter(clean);
+    if(clean.length<3){statusSetter(null);return;}
+    checkingSetter(true);
+    const available=await checkUsernameAvailable(clean);
+    statusSetter(available?"available":"taken");
+    checkingSetter(false);
+  };
+
+  const handleSignIn=async()=>{
+    if(!siInput.trim()||!siPass.trim())return;
+    setSiLoading(true);setSiError("");
+    const {user,error}=await signInWithEmail(siInput.trim(),siPass);
+    if(error){setSiError(error);setSiLoading(false);return;}
+    const existing=await loadUserProfile(user.uid);
+    if(existing&&existing.username){
+      onLogin(existing.fullName||existing.username,existing.venmo||"",existing.username,existing.dob||"",user.uid,user);
+    }else{
+      setGoogleUser(user);setStep("profile");
+    }
+    setSiLoading(false);
+  };
+
+  const handleSignUp=async()=>{
+    if(!suFirst.trim()||!suLast.trim()||!suEmail.trim()||!suUsername||!suPass||!suDob){setSuError("Please fill in all required fields.");return;}
+    if(suUsernameStatus!=="available"){setSuError("Choose an available username.");return;}
+    if(suPass.length<6){setSuError("Password must be at least 6 characters.");return;}
+    if(suPass!==suPass2){setSuError("Passwords don't match.");return;}
+    setSuLoading(true);setSuError("");
+    const {user,error}=await signUpWithEmail(suEmail.trim(),suPass);
+    if(error){setSuError(error);setSuLoading(false);return;}
+    const profileData={fullName:`${suFirst.trim()} ${suLast.trim()}`,firstName:suFirst.trim(),lastName:suLast.trim(),username:suUsername.toLowerCase(),venmo:suVenmo.trim().replace(/^@/,""),dob:suDob,email:suEmail.trim(),photoURL:"",createdAt:new Date().toISOString()};
+    await saveUserProfile(user.uid,profileData);
+    onLogin(profileData.fullName,profileData.venmo,profileData.username,profileData.dob,user.uid,user);
+    setSuLoading(false);
+  };
+
+  const handleGoogle=async()=>{
+    setGLoading(true);setSiError("");setSuError("");
     try{
       const user=await signInWithGoogle();
       if(user){
@@ -715,105 +820,164 @@ function LoginPage({onLogin}){
           onLogin(existing.fullName||existing.username,existing.venmo||"",existing.username,existing.dob||"",user.uid,user);
           return;
         }
-        const nameParts=(user.displayName||"").split(" ");
-        setFirstName(nameParts[0]||"");
-        setLastName(nameParts.slice(1).join(" ")||"");
-        setGoogleUser(user);
-        setStep("profile");
-      }else{setError("Sign-in was cancelled. Please try again.");}
-    }catch(e){setError("Sign-in failed. Please try again.");}
-    setSigningIn(false);
+        const parts=(user.displayName||"").split(" ");
+        setProfileFirst(parts[0]||"");setProfileLast(parts.slice(1).join(" ")||"");
+        setGoogleUser(user);setStep("profile");
+      }
+    }catch(e){}
+    setGLoading(false);
   };
 
-  const checkUsername=async val=>{
-    const clean=val.toLowerCase().replace(/[^a-z0-9_]/g,"");
-    setUsername(clean);
-    if(clean.length<3){setUsernameStatus(null);return;}
-    setChecking(true);
-    const available=await checkUsernameAvailable(clean);
-    setUsernameStatus(available?"available":"taken");
-    setChecking(false);
-  };
-
-  const valid=firstName.trim().length>=1&&lastName.trim().length>=1&&dob.length===10&&username.length>=3&&usernameStatus==="available";
-
-  const handleFinish=async()=>{
-    if(!valid)return;
-    const fullName=`${firstName.trim()} ${lastName.trim()}`;
-    const profileData={fullName,firstName:firstName.trim(),lastName:lastName.trim(),username:username.toLowerCase(),venmo:venmo.trim().replace(/^@/,""),dob,email:googleUser?.email||"",photoURL:googleUser?.photoURL||"",createdAt:new Date().toISOString()};
+  const handleProfileFinish=async()=>{
+    if(!profileFirst.trim()||!profileLast.trim()||!profileDob||!profileUsername||profileUsernameStatus!=="available")return;
+    const profileData={fullName:`${profileFirst.trim()} ${profileLast.trim()}`,firstName:profileFirst.trim(),lastName:profileLast.trim(),username:profileUsername.toLowerCase(),venmo:profileVenmo.trim().replace(/^@/,""),dob:profileDob,email:googleUser?.email||"",photoURL:googleUser?.photoURL||"",createdAt:new Date().toISOString()};
     if(googleUser)await saveUserProfile(googleUser.uid,profileData);
-    onLogin(fullName,venmo.trim(),username.toLowerCase(),dob,googleUser?.uid||null,googleUser);
+    onLogin(profileData.fullName,profileData.venmo,profileData.username,profileData.dob,googleUser?.uid||null,googleUser);
   };
 
-  const GoogleIcon=()=><svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>;
+  const GoogleIcon=()=><svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>;
 
-  if(step==="google"){
+  const inpStyle=(active)=>({width:"100%",background:BG,border:`1.5px solid ${active?Gold:Border}`,borderRadius:12,padding:"13px 16px",color:"#fff",fontSize:15,boxSizing:"border-box",outline:"none",fontFamily:"Georgia,serif",transition:"border-color .2s"});
+  const Divider=()=><div style={{display:"flex",alignItems:"center",gap:12,margin:"16px 0"}}><div style={{flex:1,height:1,background:Border}}/><div style={{color:"#444",fontSize:12,fontFamily:"monospace"}}>or</div><div style={{flex:1,height:1,background:Border}}/></div>;
+
+  // Profile setup screen (after Google or email signup)
+  if(step==="profile"){
+    const valid=profileFirst.trim()&&profileLast.trim()&&profileDob.length===10&&profileUsername.length>=3&&profileUsernameStatus==="available";
     return(
-      <div style={{background:BG,minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"Georgia,serif"}}>
-        <div style={{width:440,background:Card,border:`1px solid ${Border}`,borderRadius:24,padding:"48px 40px",textAlign:"center"}}>
-          <div style={{fontSize:48,marginBottom:16}}>🦈</div>
-          <div style={{color:Gold,fontSize:11,letterSpacing:3,fontFamily:"monospace",marginBottom:8}}>SHARKD</div>
-          <div style={{color:"#fff",fontSize:24,fontWeight:"bold",marginBottom:8}}>Welcome</div>
-          <div style={{color:"#555",fontSize:14,marginBottom:32,lineHeight:1.6}}>Sign in to track your games, settle debts, and climb the ranks.</div>
-          <div onClick={signingIn?undefined:handleGoogleSignIn} style={{display:"flex",alignItems:"center",gap:12,background:signingIn?"#ddd":"#fff",borderRadius:12,padding:"14px 24px",cursor:signingIn?"not-allowed":"pointer",fontSize:15,fontWeight:"bold",color:"#111",justifyContent:"center",marginBottom:16,boxShadow:"0 4px 20px rgba(0,0,0,.3)",opacity:signingIn?0.7:1}}>
-            <GoogleIcon/>{signingIn?"Signing in...":"Continue with Google"}
+      <div style={{background:BG,minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"Georgia,serif",padding:"40px 20px"}}>
+        <div style={{width:520,background:Card,border:`1px solid ${Border}`,borderRadius:24,padding:"40px"}}>
+          <div style={{textAlign:"center",marginBottom:28}}>
+            {googleUser?.photoURL&&<img src={googleUser.photoURL} style={{width:56,height:56,borderRadius:"50%",marginBottom:12,border:`2px solid ${Gold}`}}/>}
+            <div style={{color:"#fff",fontSize:20,fontWeight:"bold",marginBottom:4}}>Set up your Sharkd profile</div>
+            <div style={{color:"#555",fontSize:13}}>{googleUser?.email||""}</div>
           </div>
-          {error&&<div style={{color:Down,fontSize:13,marginBottom:8}}>{error}</div>}
-          <div style={{color:"#333",fontSize:12}}>Free forever - No credit card needed</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
+            <div><div style={{color:"#555",fontSize:11,fontFamily:"monospace",letterSpacing:1,marginBottom:6}}>FIRST NAME *</div><input value={profileFirst} onChange={e=>setProfileFirst(e.target.value)} placeholder="Carson" style={{...inpStyle(profileFirst),marginBottom:0}}/></div>
+            <div><div style={{color:"#555",fontSize:11,fontFamily:"monospace",letterSpacing:1,marginBottom:6}}>LAST NAME *</div><input value={profileLast} onChange={e=>setProfileLast(e.target.value)} placeholder="Miller" style={{...inpStyle(profileLast),marginBottom:0}}/></div>
+          </div>
+          <div style={{marginBottom:14}}>
+            <div style={{color:"#555",fontSize:11,fontFamily:"monospace",letterSpacing:1,marginBottom:6}}>DATE OF BIRTH *</div>
+            <input value={profileDob} onChange={e=>{let v=e.target.value.replace(/\D/g,"");if(v.length>=2)v=v.slice(0,2)+"/"+v.slice(2);if(v.length>=5)v=v.slice(0,5)+"/"+v.slice(5);setProfileDob(v.slice(0,10));}} placeholder="MM/DD/YYYY" maxLength={10} style={inpStyle(profileDob.length===10)}/>
+          </div>
+          <div style={{marginBottom:14}}>
+            <div style={{color:"#555",fontSize:11,fontFamily:"monospace",letterSpacing:1,marginBottom:6}}>SHARKD USERNAME *</div>
+            <div style={{position:"relative"}}>
+              <span style={{position:"absolute",left:14,top:"50%",transform:"translateY(-50%)",color:Gold,fontSize:15,fontWeight:"bold",pointerEvents:"none"}}>@</span>
+              <input value={profileUsername} onChange={e=>checkUsername(e.target.value,setProfileUsername,setProfileUsernameStatus,setProfileCheckingU)} placeholder="yourhandle" maxLength={20} style={{...inpStyle(profileUsernameStatus==="available"),paddingLeft:30}}/>
+              {profileCheckingU&&<div style={{position:"absolute",right:14,top:"50%",transform:"translateY(-50%)",color:"#555",fontSize:12}}>checking...</div>}
+            </div>
+            {profileUsernameStatus==="taken"&&<div style={{color:Down,fontSize:12,marginTop:4}}>@{profileUsername} is taken.</div>}
+            {profileUsernameStatus==="available"&&<div style={{color:Up,fontSize:12,marginTop:4}}>@{profileUsername} is available!</div>}
+          </div>
+          <div style={{marginBottom:24}}>
+            <div style={{color:"#555",fontSize:11,fontFamily:"monospace",letterSpacing:1,marginBottom:6}}>VENMO (optional)</div>
+            <div style={{position:"relative"}}><span style={{position:"absolute",left:14,top:"50%",transform:"translateY(-50%)",color:"#00a4eb",fontSize:16,fontWeight:"bold",pointerEvents:"none"}}>@</span><input value={profileVenmo} onChange={e=>setProfileVenmo(e.target.value.replace(/^@/,""))} placeholder="your-venmo" style={{...inpStyle(false),paddingLeft:30}}/></div>
+          </div>
+          <div style={{opacity:valid?1:0.4}}>
+            <div onClick={valid?handleProfileFinish:undefined} style={{background:`linear-gradient(135deg,${Gold},${GoldDim})`,borderRadius:12,padding:"15px",textAlign:"center",color:BG,fontWeight:"bold",fontSize:16,cursor:valid?"pointer":"not-allowed"}}>Enter Sharkd 🦈</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Forgot password screen
+  if(showForgot){
+    return(
+      <div style={{background:BG,minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"Georgia,serif",padding:"20px"}}>
+        <div style={{width:420,background:Card,border:`1px solid ${Border}`,borderRadius:24,padding:"40px"}}>
+          <div style={{textAlign:"center",marginBottom:24}}>
+            <div style={{fontSize:40,marginBottom:12}}>🔑</div>
+            <div style={{color:"#fff",fontSize:20,fontWeight:"bold",marginBottom:6}}>Reset password</div>
+            <div style={{color:"#555",fontSize:13}}>Enter your email and we'll send a reset link</div>
+          </div>
+          {!forgotSent?(
+            <>
+              <input value={forgotEmail} onChange={e=>setForgotEmail(e.target.value)} placeholder="your@email.com" style={{...inpStyle(forgotEmail),marginBottom:16}}/>
+              <div onClick={async()=>{if(!forgotEmail.trim())return;const ok=await sendPasswordReset(forgotEmail.trim());if(ok)setForgotSent(true);}} style={{background:`linear-gradient(135deg,${Gold},${GoldDim})`,borderRadius:12,padding:"14px",textAlign:"center",color:BG,fontWeight:"bold",fontSize:15,cursor:"pointer",marginBottom:14}}>Send Reset Link</div>
+            </>
+          ):(
+            <div style={{background:`${Up}12`,border:`1px solid ${Up}33`,borderRadius:12,padding:"16px",textAlign:"center",color:Up,marginBottom:16}}>✓ Reset link sent to {forgotEmail}</div>
+          )}
+          <div onClick={()=>setShowForgot(false)} style={{textAlign:"center",color:Gold,fontSize:13,cursor:"pointer"}}>← Back to sign in</div>
         </div>
       </div>
     );
   }
 
   return(
-    <div style={{background:BG,minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"Georgia,serif",padding:"40px 20px"}}>
-      <div style={{width:520,background:Card,border:`1px solid ${Border}`,borderRadius:24,padding:"40px"}}>
-        <div style={{textAlign:"center",marginBottom:28}}>
-          {googleUser?.photoURL&&<img src={googleUser.photoURL} style={{width:56,height:56,borderRadius:"50%",marginBottom:12,border:`2px solid ${Gold}`}}/>}
-          <div style={{color:"#fff",fontSize:20,fontWeight:"bold",marginBottom:4}}>Set up your Sharkd profile</div>
-          <div style={{color:"#555",fontSize:13}}>{googleUser?.email||"This is how other players will know you"}</div>
+    <div style={{background:BG,minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"Georgia,serif",padding:"20px"}}>
+      <div style={{width:440,background:Card,border:`1px solid ${Border}`,borderRadius:24,padding:"40px"}}>
+        <div style={{textAlign:"center",marginBottom:24}}>
+          <div style={{fontSize:44,marginBottom:10}}>🦈</div>
+          <div style={{color:Gold,fontSize:11,letterSpacing:3,fontFamily:"monospace",marginBottom:6}}>SHARKD</div>
+          <div style={{color:"#fff",fontSize:22,fontWeight:"bold"}}>{tab==="signin"?"Welcome back":"Create your account"}</div>
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
-          <div>
-            <div style={{color:"#555",fontSize:11,fontFamily:"monospace",letterSpacing:1,marginBottom:6}}>FIRST NAME *</div>
-            <input value={firstName} onChange={e=>setFirstName(e.target.value)} placeholder="Carson" autoFocus style={{width:"100%",background:BG,border:`1.5px solid ${firstName?Gold:Border}`,borderRadius:10,padding:"11px 14px",color:"#fff",fontSize:15,boxSizing:"border-box",outline:"none"}}/>
-          </div>
-          <div>
-            <div style={{color:"#555",fontSize:11,fontFamily:"monospace",letterSpacing:1,marginBottom:6}}>LAST NAME *</div>
-            <input value={lastName} onChange={e=>setLastName(e.target.value)} placeholder="Miller" style={{width:"100%",background:BG,border:`1.5px solid ${lastName?Gold:Border}`,borderRadius:10,padding:"11px 14px",color:"#fff",fontSize:15,boxSizing:"border-box",outline:"none"}}/>
-          </div>
+
+        {/* Tabs */}
+        <div style={{display:"flex",border:`1px solid ${Border}`,borderRadius:12,overflow:"hidden",marginBottom:24}}>
+          {[["signin","Sign In"],["signup","Create Account"]].map(([t,label])=>(
+            <div key={t} onClick={()=>{setTab(t);setSiError("");setSuError("");}} style={{flex:1,padding:"11px",textAlign:"center",cursor:"pointer",background:tab===t?`${Gold}22`:"transparent",color:tab===t?Gold:"#555",fontWeight:tab===t?"bold":"normal",fontSize:13,transition:"all .2s"}}>{label}</div>
+          ))}
         </div>
-        <div style={{marginBottom:14}}>
-          <div style={{color:"#555",fontSize:11,fontFamily:"monospace",letterSpacing:1,marginBottom:6}}>DATE OF BIRTH *</div>
-          <input value={dob} onChange={e=>{let v=e.target.value.replace(/\D/g,"");if(v.length>=2)v=v.slice(0,2)+"/"+v.slice(2);if(v.length>=5)v=v.slice(0,5)+"/"+v.slice(5);setDob(v.slice(0,10));}} placeholder="MM/DD/YYYY" maxLength={10} style={{width:"100%",background:BG,border:`1.5px solid ${dob.length===10?Gold:Border}`,borderRadius:10,padding:"11px 14px",color:"#fff",fontSize:15,boxSizing:"border-box",outline:"none",fontFamily:"monospace"}}/>
-          <div style={{color:"#444",fontSize:11,marginTop:4}}>Must be 18+ to use Sharkd</div>
-        </div>
-        <div style={{marginBottom:14}}>
-          <div style={{color:"#555",fontSize:11,fontFamily:"monospace",letterSpacing:1,marginBottom:6}}>SHARKD USERNAME *</div>
-          <div style={{position:"relative"}}>
-            <span style={{position:"absolute",left:14,top:"50%",transform:"translateY(-50%)",color:Gold,fontSize:15,fontWeight:"bold",pointerEvents:"none"}}>@</span>
-            <input value={username} onChange={e=>checkUsername(e.target.value)} onFocus={()=>setUsernameFocus(true)} onBlur={()=>setUsernameFocus(false)} placeholder="yourhandle" maxLength={20} style={{width:"100%",background:BG,border:`1.5px solid ${usernameStatus==="available"?Up:usernameStatus==="taken"?Down:usernameFocus?Gold:Border}`,borderRadius:10,padding:"11px 14px 11px 30px",color:"#fff",fontSize:15,boxSizing:"border-box",outline:"none",fontFamily:"monospace"}}/>
-            {checking&&<div style={{position:"absolute",right:14,top:"50%",transform:"translateY(-50%)",color:"#555",fontSize:12}}>checking...</div>}
-            {!checking&&usernameStatus&&<div style={{position:"absolute",right:14,top:"50%",transform:"translateY(-50%)",fontSize:16}}>{usernameStatus==="available"?"ok":"taken"}</div>}
-          </div>
-          {usernameStatus==="taken"&&<div style={{color:Down,fontSize:12,marginTop:4}}>@{username} is taken. Try another.</div>}
-          {usernameStatus==="available"&&<div style={{color:Up,fontSize:12,marginTop:4}}>@{username} is available!</div>}
-          {!usernameStatus&&<div style={{color:"#444",fontSize:11,marginTop:4}}>Letters, numbers, underscores only. Min 3 chars.</div>}
-        </div>
-        <div style={{marginBottom:24}}>
-          <div style={{color:"#555",fontSize:11,fontFamily:"monospace",letterSpacing:1,marginBottom:6}}>VENMO USERNAME (optional)</div>
-          <div style={{position:"relative"}}>
-            <span style={{position:"absolute",left:14,top:"50%",transform:"translateY(-50%)",color:"#00a4eb",fontSize:16,fontWeight:"bold",pointerEvents:"none"}}>@</span>
-            <input value={venmo} onChange={e=>setVenmo(e.target.value.replace(/^@/,""))} placeholder="your-venmo" style={{width:"100%",background:BG,border:"1.5px solid #00a4eb33",borderRadius:10,padding:"11px 14px 11px 30px",color:"#fff",fontSize:15,boxSizing:"border-box",outline:"none",fontFamily:"monospace"}}/>
-          </div>
-          <div style={{color:"#444",fontSize:11,marginTop:4}}>Friends see this to know where to pay you</div>
-        </div>
-        <div style={{opacity:valid?1:0.4,transition:"opacity .3s"}}>
-          <div onClick={handleFinish} style={{background:`linear-gradient(135deg,${Gold},${GoldDim})`,borderRadius:12,padding:"15px",textAlign:"center",color:BG,fontWeight:"bold",fontSize:16,cursor:valid?"pointer":"not-allowed"}}>
-            Enter Sharkd
-          </div>
-        </div>
-        {!valid&&<div style={{color:"#444",fontSize:12,textAlign:"center",marginTop:10}}>Fill in all required fields to continue</div>}
+
+        {tab==="signin"&&(
+          <>
+            <div style={{marginBottom:14}}>
+              <div style={{color:"#555",fontSize:11,fontFamily:"monospace",letterSpacing:1,marginBottom:6}}>USERNAME OR EMAIL</div>
+              <input value={siInput} onChange={e=>setSiInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleSignIn()} placeholder="@yourhandle or email" style={inpStyle(siInput)}/>
+            </div>
+            <div style={{marginBottom:6}}>
+              <div style={{color:"#555",fontSize:11,fontFamily:"monospace",letterSpacing:1,marginBottom:6}}>PASSWORD</div>
+              <input value={siPass} onChange={e=>setSiPass(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleSignIn()} type="password" placeholder="••••••••" style={inpStyle(siPass)}/>
+            </div>
+            <div onClick={()=>setShowForgot(true)} style={{textAlign:"right",color:Gold,fontSize:12,cursor:"pointer",marginBottom:20}}>Forgot password?</div>
+            {siError&&<div style={{color:Down,fontSize:13,marginBottom:12,textAlign:"center"}}>{siError}</div>}
+            <div onClick={siLoading?undefined:handleSignIn} style={{background:`linear-gradient(135deg,${Gold},${GoldDim})`,borderRadius:12,padding:"14px",textAlign:"center",color:BG,fontWeight:"bold",fontSize:15,cursor:siLoading?"not-allowed":"pointer",opacity:siLoading?0.7:1,marginBottom:14}}>{siLoading?"Signing in...":"Sign In"}</div>
+            <Divider/>
+            <div onClick={gLoading?undefined:handleGoogle} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:12,background:gLoading?"#ddd":"#fff",borderRadius:12,padding:"13px",cursor:gLoading?"not-allowed":"pointer",fontSize:14,fontWeight:"bold",color:"#111",opacity:gLoading?0.7:1}}><GoogleIcon/>{gLoading?"Signing in...":"Continue with Google"}</div>
+          </>
+        )}
+
+        {tab==="signup"&&(
+          <>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
+              <div><div style={{color:"#555",fontSize:11,fontFamily:"monospace",letterSpacing:1,marginBottom:6}}>FIRST NAME *</div><input value={suFirst} onChange={e=>setSuFirst(e.target.value)} placeholder="Carson" style={{...inpStyle(suFirst),marginBottom:0}}/></div>
+              <div><div style={{color:"#555",fontSize:11,fontFamily:"monospace",letterSpacing:1,marginBottom:6}}>LAST NAME *</div><input value={suLast} onChange={e=>setSuLast(e.target.value)} placeholder="Miller" style={{...inpStyle(suLast),marginBottom:0}}/></div>
+            </div>
+            <div style={{marginBottom:14}}>
+              <div style={{color:"#555",fontSize:11,fontFamily:"monospace",letterSpacing:1,marginBottom:6}}>EMAIL *</div>
+              <input value={suEmail} onChange={e=>setSuEmail(e.target.value)} placeholder="you@email.com" type="email" style={inpStyle(suEmail)}/>
+            </div>
+            <div style={{marginBottom:14}}>
+              <div style={{color:"#555",fontSize:11,fontFamily:"monospace",letterSpacing:1,marginBottom:6}}>DATE OF BIRTH *</div>
+              <input value={suDob} onChange={e=>{let v=e.target.value.replace(/\D/g,"");if(v.length>=2)v=v.slice(0,2)+"/"+v.slice(2);if(v.length>=5)v=v.slice(0,5)+"/"+v.slice(5);setSuDob(v.slice(0,10));}} placeholder="MM/DD/YYYY" maxLength={10} style={inpStyle(suDob.length===10)}/>
+            </div>
+            <div style={{marginBottom:14}}>
+              <div style={{color:"#555",fontSize:11,fontFamily:"monospace",letterSpacing:1,marginBottom:6}}>SHARKD USERNAME *</div>
+              <div style={{position:"relative"}}>
+                <span style={{position:"absolute",left:14,top:"50%",transform:"translateY(-50%)",color:Gold,fontSize:15,fontWeight:"bold",pointerEvents:"none"}}>@</span>
+                <input value={suUsername} onChange={e=>checkUsername(e.target.value,setSuUsername,setSuUsernameStatus,setSuCheckingU)} placeholder="yourhandle" maxLength={20} style={{...inpStyle(suUsernameStatus==="available"),paddingLeft:30}}/>
+                {suCheckingU&&<div style={{position:"absolute",right:14,top:"50%",transform:"translateY(-50%)",color:"#555",fontSize:12}}>checking...</div>}
+              </div>
+              {suUsernameStatus==="taken"&&<div style={{color:Down,fontSize:12,marginTop:4}}>@{suUsername} is taken.</div>}
+              {suUsernameStatus==="available"&&<div style={{color:Up,fontSize:12,marginTop:4}}>@{suUsername} is available!</div>}
+            </div>
+            <div style={{marginBottom:14}}>
+              <div style={{color:"#555",fontSize:11,fontFamily:"monospace",letterSpacing:1,marginBottom:6}}>PASSWORD *</div>
+              <input value={suPass} onChange={e=>setSuPass(e.target.value)} type="password" placeholder="Min 6 characters" style={inpStyle(suPass)}/>
+            </div>
+            <div style={{marginBottom:20}}>
+              <div style={{color:"#555",fontSize:11,fontFamily:"monospace",letterSpacing:1,marginBottom:6}}>CONFIRM PASSWORD *</div>
+              <input value={suPass2} onChange={e=>setSuPass2(e.target.value)} type="password" placeholder="Repeat password" style={{...inpStyle(suPass2&&suPass2===suPass),border:`1.5px solid ${suPass2&&suPass2!==suPass?Down:suPass2&&suPass2===suPass?Up:Border}`}}/>
+              {suPass2&&suPass!==suPass2&&<div style={{color:Down,fontSize:12,marginTop:4}}>Passwords don't match</div>}
+            </div>
+            {suError&&<div style={{color:Down,fontSize:13,marginBottom:12,textAlign:"center"}}>{suError}</div>}
+            <div onClick={suLoading?undefined:handleSignUp} style={{background:`linear-gradient(135deg,${Gold},${GoldDim})`,borderRadius:12,padding:"14px",textAlign:"center",color:BG,fontWeight:"bold",fontSize:15,cursor:suLoading?"not-allowed":"pointer",opacity:suLoading?0.7:1,marginBottom:14}}>{suLoading?"Creating account...":"Create Account"}</div>
+            <Divider/>
+            <div onClick={gLoading?undefined:handleGoogle} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:12,background:gLoading?"#ddd":"#fff",borderRadius:12,padding:"13px",cursor:gLoading?"not-allowed":"pointer",fontSize:14,fontWeight:"bold",color:"#111",opacity:gLoading?0.7:1}}><GoogleIcon/>{gLoading?"Signing in...":"Sign up with Google"}</div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -1625,6 +1789,107 @@ function StatsScreen({profile,nav,myGames,myStats,myScore,myRank}){
 }
 
 // ─── RANK SCREEN ─────────────────────────────────────────────────────────────
+function AnimatedMetrics({myStats,myRank}){
+  const [visible,setVisible]=useState(false);
+  const [widths,setWidths]=useState(METRICS.map(()=>0));
+  useEffect(()=>{
+    setVisible(false);
+    setWidths(METRICS.map(()=>0));
+    const t1=setTimeout(()=>setVisible(true),50);
+    const timers=METRICS.map((_,i)=>setTimeout(()=>{
+      const val=myStats[_.key]||0;
+      setWidths(prev=>{const n=[...prev];n[i]=val*10;return n;});
+    },i*120+200));
+    return()=>{clearTimeout(t1);timers.forEach(clearTimeout);};
+  },[myStats,myRank]);
+  return(
+    <Card2>
+      <SectionLabel text={`Metrics — ${myStats.gamesPlayed} games played`}/>
+      {METRICS.map((m,i)=>{
+        const val=myStats[m.key]||0;
+        return(
+          <div key={m.key} style={{marginBottom:18,opacity:visible?1:0,transform:visible?"translateX(0)":"translateX(-16px)",transition:`opacity 0.35s ease ${i*0.08}s, transform 0.35s ease ${i*0.08}s`}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <span style={{fontSize:16}}>{m.icon}</span>
+                <span style={{color:"#fff",fontSize:14,fontWeight:"bold"}}>{m.label}</span>
+                <span style={{color:"#555",fontSize:12}}>({(m.weight*100).toFixed(0)}%)</span>
+              </div>
+              <span style={{color:myRank.color,fontWeight:"bold",fontSize:14,fontFamily:"monospace"}}>{m.fmt(val)}</span>
+            </div>
+            <div style={{height:6,background:"#1a1a2e",borderRadius:3,overflow:"hidden"}}>
+              <div style={{height:"100%",width:`${widths[i]}%`,background:`linear-gradient(90deg,${myRank.color}77,${myRank.color})`,borderRadius:3,transition:`width 0.8s cubic-bezier(0.4,0,0.2,1) ${i*0.1}s`}}/>
+            </div>
+          </div>
+        );
+      })}
+    </Card2>
+  );
+}
+
+function AnimatedLadder({myScore,myRank}){
+  const [visible,setVisible]=useState(false);
+  const [barWidths,setBarWidths]=useState({});
+  const reversed=[...RANKS].reverse();
+  useEffect(()=>{
+    setVisible(false);
+    setBarWidths({});
+    const t1=setTimeout(()=>setVisible(true),50);
+    const timers=reversed.map((r,i)=>setTimeout(()=>{
+      const isCur=r.tier===myRank.tier;
+      const isBelow=r.max<=myScore&&!isCur;
+      const pct=isCur?((myScore-r.min)/(r.max-r.min))*100:isBelow?100:0;
+      setBarWidths(prev=>({...prev,[r.tier]:pct}));
+    },i*80+250));
+    return()=>{clearTimeout(t1);timers.forEach(clearTimeout);};
+  },[myScore,myRank]);
+  return(
+    <Card2 style={{padding:0,overflow:"hidden"}}>
+      {reversed.map((r,i)=>{
+        const isCur=r.tier===myRank.tier;
+        const isBelow=r.max<=myScore&&!isCur;
+        const isAbove=r.min>myScore&&!isCur;
+        const showDivider=i>0&&(isCur||(isBelow&&reversed[i-1].tier===myRank.tier));
+        return(
+          <div key={r.tier}>
+            {showDivider&&<div style={{height:1,background:Border}}/>}
+            <div style={{display:"flex",alignItems:"center",gap:14,padding:"14px 20px",
+              background:isCur?`${r.color}10`:isBelow?`${r.color}06`:"transparent",
+              borderLeft:`3px solid ${isCur?r.color:isBelow?r.color+"55":isAbove?r.color+"22":"transparent"}`,
+              opacity:visible?(isAbove?0.35:1):0,
+              transform:visible?"translateY(0)":"translateY(8px)",
+              transition:`opacity 0.35s ease ${i*0.07}s, transform 0.35s ease ${i*0.07}s`,
+            }}>
+              <div style={{position:"relative",width:48,height:48,flexShrink:0}}>
+                <div style={{width:48,height:48,borderRadius:"50%",
+                  background:`${r.color}${isCur?"22":isBelow?"18":"0d"}`,
+                  border:`2px solid ${r.color}${isCur?"":isBelow?"88":"44"}`,
+                  display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,
+                }}>{r.emoji}</div>
+                {isBelow&&<div style={{position:"absolute",bottom:-2,right:-2,width:18,height:18,borderRadius:"50%",background:Up,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:BG,fontWeight:"bold",border:`2px solid ${BG}`}}>✓</div>}
+              </div>
+              <div style={{flex:1}}>
+                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  <span style={{color:isCur?r.color:isBelow?r.color:r.color+"88",fontWeight:"bold",fontSize:15}}>{r.tier}</span>
+                  {isCur&&<span style={{background:`${r.color}22`,border:`1px solid ${r.color}44`,borderRadius:6,padding:"2px 8px",fontSize:10,color:r.color,letterSpacing:1,fontFamily:"monospace"}}>YOU</span>}
+                  {isBelow&&<span style={{color:Up,fontSize:11,fontFamily:"monospace"}}>✓ completed</span>}
+                </div>
+                <div style={{color:isAbove?r.color+"44":"#444",fontSize:11,fontFamily:"monospace",marginTop:2}}>{r.min.toFixed(1)} — {r.max.toFixed(1)}</div>
+              </div>
+              <div style={{width:100,height:5,background:"#1a1a2e",borderRadius:3,overflow:"hidden"}}>
+                <div style={{height:"100%",width:`${barWidths[r.tier]||0}%`,borderRadius:3,
+                  background:r.color+(isCur?"":isBelow?"aa":"44"),
+                  transition:`width 0.9s cubic-bezier(0.4,0,0.2,1)`
+                }}/>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </Card2>
+  );
+}
+
 function AnimatedRankCard({profile,myScore,myRank,myStats,nextRank,toNext,pct,myGames}){
   const allTime=myGames.reduce((s,g)=>s+g.net,0);
   const wins=myGames.filter(g=>g.net>0).length;
@@ -1740,77 +2005,8 @@ function RankScreen({nav,profile,myStats,myScore,myRank,myGames}){
         {tab==="card"&&(
           <AnimatedRankCard profile={profile} myScore={myScore} myRank={myRank} myStats={myStats} nextRank={nextRank} toNext={toNext} pct={pct} myGames={myGames||[]}/>
         )}
-        {tab==="metrics"&&(
-          <Card2>
-            <SectionLabel text={`Metrics — ${myStats.gamesPlayed} games played`}/>
-            {METRICS.map((m,i)=>{
-              const val=myStats[m.key]||0;
-              const barId=`mbar_${m.key}`;
-              return(
-                <div key={m.key} style={{marginBottom:16,opacity:0,transform:"translateX(-16px)",animation:`slideIn 0.4s ease ${i*0.1}s forwards`}}>
-                  <style>{`@keyframes slideIn{to{opacity:1;transform:translateX(0)}}`}</style>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                    <div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:16}}>{m.icon}</span><span style={{color:"#fff",fontSize:14,fontWeight:"bold"}}>{m.label}</span><span style={{color:"#555",fontSize:12}}>({(m.weight*100).toFixed(0)}%)</span></div>
-                    <span style={{color:myRank.color,fontWeight:"bold",fontSize:14,fontFamily:"monospace"}}>{m.fmt(val)}</span>
-                  </div>
-                  <div style={{height:6,background:"#1a1a2e",borderRadius:3,overflow:"hidden"}}>
-                    <div id={barId} style={{height:"100%",width:"0%",background:`linear-gradient(90deg,${myRank.color}77,${myRank.color})`,borderRadius:3,transition:`width 0.8s cubic-bezier(0.4,0,0.2,1) ${i*0.1+0.2}s`}}/>
-                  </div>
-                  <script dangerouslySetInnerHTML={{__html:`setTimeout(()=>{const b=document.getElementById('${barId}');if(b)b.style.width='${val*10}%';},${i*100+100})`}}/>
-                </div>
-              );
-            })}
-          </Card2>
-        )}
-        {tab==="ladder"&&(
-          <Card2 style={{padding:0,overflow:"hidden"}}>
-            {[...RANKS].reverse().map((r,i)=>{
-              const isCur=r.tier===myRank.tier;
-              const isBelow=r.max<=myScore&&!isCur;
-              const isAbove=r.min>=myScore&&!isCur;
-              const pct2=isCur?((myScore-r.min)/(r.max-r.min))*100:0;
-              const barId=`lbar_${r.tier.replace(/\s/g,"")}`;
-              const showDivider=(i>0&&([...RANKS].reverse()[i-1].max<=myScore||[...RANKS].reverse()[i-1].tier===myRank.tier))&&(isCur||isBelow);
-              return(
-                <div key={r.tier}>
-                  {showDivider&&<div style={{height:1,background:Border,margin:"4px 0"}}/>}
-                  <div style={{display:"flex",alignItems:"center",gap:14,padding:"14px 20px",
-                    background:isCur?`${r.color}08`:isBelow?"#00e09604":"transparent",
-                    borderLeft:isCur?`3px solid ${r.color}`:isBelow?"3px solid #00e09644":"3px solid transparent",
-                    opacity:isAbove?0.3:1,
-                    animation:`fadeUp 0.35s ease ${i*0.07}s both`,
-                  }}>
-                    <style>{`@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}`}</style>
-                    <div style={{position:"relative",width:48,height:48,flexShrink:0}}>
-                      <div style={{width:48,height:48,borderRadius:"50%",
-                        background:isCur?`${r.color}22`:isBelow?"#00e09612":"#1a1a2e",
-                        border:`2px solid ${isCur?r.color:isBelow?"#00e09644":"#2a2a3a"}`,
-                        display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,
-                        filter:isAbove?"grayscale(1)":"none",
-                      }}>{r.emoji}</div>
-                      {isBelow&&<div style={{position:"absolute",bottom:-2,right:-2,width:18,height:18,borderRadius:"50%",background:Up,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:BG,fontWeight:"bold"}}>✓</div>}
-                    </div>
-                    <div style={{flex:1}}>
-                      <div style={{display:"flex",alignItems:"center",gap:8}}>
-                        <span style={{color:isCur?r.color:isBelow?Up:isAbove?"#333":"#aaa",fontWeight:"bold",fontSize:15}}>{r.tier}</span>
-                        {isCur&&<span style={{background:`${r.color}22`,border:`1px solid ${r.color}44`,borderRadius:6,padding:"2px 8px",fontSize:10,color:r.color,letterSpacing:1,fontFamily:"monospace"}}>YOU</span>}
-                        {isBelow&&<span style={{color:Up,fontSize:11,fontFamily:"monospace"}}>completed</span>}
-                      </div>
-                      <div style={{color:isAbove?"#222":"#444",fontSize:11,fontFamily:"monospace",marginTop:2}}>{r.min.toFixed(1)} — {r.max.toFixed(1)}</div>
-                    </div>
-                    <div style={{width:100,height:5,background:"#1a1a2e",borderRadius:3,overflow:"hidden"}}>
-                      <div id={barId} style={{height:"100%",width:"0%",borderRadius:3,
-                        background:isCur?r.color:isBelow?Up:"transparent",
-                        transition:`width 1s cubic-bezier(0.4,0,0.2,1) ${i*0.07+0.3}s`
-                      }}/>
-                    </div>
-                    <script dangerouslySetInnerHTML={{__html:`setTimeout(()=>{const b=document.getElementById('${barId}');if(b)b.style.width='${isCur?pct2:isBelow?100:0}%';},${i*70+200})`}}/>
-                  </div>
-                </div>
-              );
-            })}
-          </Card2>
-        )}
+        {tab==="metrics"&&<AnimatedMetrics myStats={myStats} myRank={myRank}/>}
+        {tab==="ladder"&&<AnimatedLadder myScore={myScore} myRank={myRank}/>}
       </div>
     </MainContent>
   );
@@ -2220,16 +2416,56 @@ function NotificationsScreen({nav,notifs,markAllRead,setNotifs,setFriends,profil
 
 // ─── SETTINGS ────────────────────────────────────────────────────────────────
 function SettingsScreen({nav,profile,setProfile,showToast,onLogout}){
-  const isMobile=useIsMobile();  const [tab,setTab]=useState("profile"),[username,setUsername]=useState(profile.username);
+  const isMobile=useIsMobile();
+  const [tab,setTab]=useState("profile");
+  const [displayName,setDisplayName]=useState(profile.username||"");
   const [venmo,setVenmo]=useState(profile.venmo||"");
-  const saveProfile=()=>{if(!username.trim())return;setProfile(p=>({...p,username:username.trim(),venmo:venmo.trim().replace(/^@/,"")}));showToast("✓ Profile saved!");};
+  const [newUsername,setNewUsername]=useState(profile.username||"");
+  const [usernameStatus,setUsernameStatus]=useState(null);
+  const [checkingUsername,setCheckingUsername]=useState(false);
+  const [confirmDelete,setConfirmDelete]=useState(false);
+
+  // Check if username can be changed (once per month)
+  const lastChanged=profile.usernameChangedAt?new Date(profile.usernameChangedAt):null;
+  const now=new Date();
+  const daysSinceChange=lastChanged?Math.floor((now-lastChanged)/(1000*60*60*24)):999;
+  const canChangeUsername=daysSinceChange>=30;
+  const daysUntilChange=canChangeUsername?0:30-daysSinceChange;
+
+  const checkUsername=async(val)=>{
+    const clean=val.toLowerCase().replace(/[^a-z0-9_]/g,"");
+    setNewUsername(clean);
+    if(clean.length<3||clean===profile.username){setUsernameStatus(null);return;}
+    setCheckingUsername(true);
+    const available=await checkUsernameAvailable(clean);
+    setUsernameStatus(available?"available":"taken");
+    setCheckingUsername(false);
+  };
+
+  const saveProfile=async()=>{
+    if(!displayName.trim())return;
+    const updates={username:displayName.trim(),venmo:venmo.trim().replace(/^@/,"")};
+    setProfile(p=>({...p,...updates}));
+    if(profile.uid)await saveUserProfile(profile.uid,updates);
+    showToast("✓ Profile saved!");
+  };
+
+  const saveUsername=async()=>{
+    if(!canChangeUsername||usernameStatus!=="available"||newUsername.length<3)return;
+    const updates={username:newUsername,usernameChangedAt:now.toISOString()};
+    setProfile(p=>({...p,...updates}));
+    if(profile.uid)await saveUserProfile(profile.uid,updates);
+    setUsernameStatus(null);
+    showToast("✓ Username updated!");
+  };
+
   return(
     <MainContent isMobile={isMobile}>
       <PageHeader title="Settings"/>
-      <div style={{display:"flex",gap:24}}>
-        {/* Tabs */}
-        <div style={{width:200,flexShrink:0}}>
-          {[["profile","👤 Profile"],["security","🔒 Security"],["privacy","🔏 Privacy"]].map(([t,label])=>(
+      <div style={{display:"flex",gap:24,flexWrap:isMobile?"wrap":"nowrap"}}>
+        {/* Sidebar tabs */}
+        <div style={{width:isMobile?"100%":200,flexShrink:0}}>
+          {[["profile","👤 Profile"],["account","🔑 Account"],["privacy","🔏 Privacy"]].map(([t,label])=>(
             <div key={t} onClick={()=>setTab(t)} style={{padding:"12px 16px",borderRadius:10,cursor:"pointer",background:tab===t?`${Gold}18`:"transparent",borderLeft:tab===t?`3px solid ${Gold}`:"3px solid transparent",color:tab===t?Gold:"#666",fontWeight:tab===t?"bold":"normal",fontSize:14,marginBottom:4,transition:"all .15s"}}>{label}</div>
           ))}
           <div onClick={onLogout} style={{padding:"12px 16px",borderRadius:10,cursor:"pointer",color:Down,fontSize:14,marginTop:16,borderLeft:"3px solid transparent"}}>🚪 Sign Out</div>
@@ -2238,29 +2474,91 @@ function SettingsScreen({nav,profile,setProfile,showToast,onLogout}){
         {/* Content */}
         <div style={{flex:1,maxWidth:600}}>
           {tab==="profile"&&(
-            <Card2>
-              <SectionLabel text="Display Name"/>
-              <input value={username} onChange={e=>setUsername(e.target.value)} style={{width:"100%",background:BG,border:`1px solid ${Border}`,borderRadius:10,padding:"12px 16px",color:"#fff",fontSize:16,boxSizing:"border-box",outline:"none",marginBottom:20}}/>
-              <SectionLabel text="Venmo Username"/>
-              <div style={{position:"relative",marginBottom:8}}>
-                <span style={{position:"absolute",left:14,top:"50%",transform:"translateY(-50%)",color:"#00a4eb",fontSize:16,fontWeight:"bold",pointerEvents:"none"}}>@</span>
-                <input value={venmo} onChange={e=>setVenmo(e.target.value.replace(/^@/,""))} placeholder="your-venmo-handle" style={{width:"100%",background:BG,border:`1px solid #00a4eb33`,borderRadius:10,padding:"12px 16px 12px 32px",color:"#fff",fontSize:15,boxSizing:"border-box",outline:"none",fontFamily:"monospace"}}/>
-              </div>
-              <div style={{color:"#444",fontSize:12,marginBottom:20}}>Friends see this to know where to pay you — no payments processed here</div>
-              <Btn label="Save Profile" onClick={saveProfile}/>
-            </Card2>
+            <div>
+              {/* Display name + Venmo */}
+              <Card2 style={{marginBottom:16}}>
+                <SectionLabel text="Display Name"/>
+                <input value={displayName} onChange={e=>setDisplayName(e.target.value)} placeholder="Your display name" style={{width:"100%",background:BG,border:`1px solid ${Border}`,borderRadius:10,padding:"12px 16px",color:"#fff",fontSize:15,boxSizing:"border-box",outline:"none",marginBottom:6}}/>
+                <div style={{color:"#444",fontSize:12,marginBottom:20}}>This can be changed anytime</div>
+                <SectionLabel text="Venmo Username"/>
+                <div style={{position:"relative",marginBottom:8}}>
+                  <span style={{position:"absolute",left:14,top:"50%",transform:"translateY(-50%)",color:"#00a4eb",fontSize:16,fontWeight:"bold",pointerEvents:"none"}}>@</span>
+                  <input value={venmo} onChange={e=>setVenmo(e.target.value.replace(/^@/,""))} placeholder="your-venmo-handle" style={{width:"100%",background:BG,border:"1px solid #00a4eb33",borderRadius:10,padding:"12px 16px 12px 32px",color:"#fff",fontSize:15,boxSizing:"border-box",outline:"none",fontFamily:"monospace"}}/>
+                </div>
+                <div style={{color:"#444",fontSize:12,marginBottom:20}}>Friends see this to know where to pay you — no payments processed here</div>
+                <Btn label="Save Profile" onClick={saveProfile}/>
+              </Card2>
+
+              {/* Username change */}
+              <Card2>
+                <SectionLabel text="Sharkd Username"/>
+                <div style={{background:`${Gold}0a`,border:`1px solid ${Gold}22`,borderRadius:10,padding:"12px 16px",marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div><div style={{color:"#fff",fontSize:15,fontFamily:"monospace"}}>@{profile.username}</div><div style={{color:"#555",fontSize:12,marginTop:2}}>Current username</div></div>
+                  {canChangeUsername?<span style={{color:Up,fontSize:12}}>Can change now</span>:<span style={{color:"#555",fontSize:12}}>{daysUntilChange} days until next change</span>}
+                </div>
+                {canChangeUsername?(
+                  <>
+                    <div style={{position:"relative",marginBottom:8}}>
+                      <span style={{position:"absolute",left:14,top:"50%",transform:"translateY(-50%)",color:Gold,fontSize:15,fontWeight:"bold",pointerEvents:"none"}}>@</span>
+                      <input value={newUsername} onChange={e=>checkUsername(e.target.value)} placeholder="newusername" maxLength={20} style={{width:"100%",background:BG,border:`1.5px solid ${usernameStatus==="available"?Up:usernameStatus==="taken"?Down:Border}`,borderRadius:10,padding:"12px 16px 12px 32px",color:"#fff",fontSize:15,boxSizing:"border-box",outline:"none",fontFamily:"monospace"}}/>
+                      {checkingUsername&&<div style={{position:"absolute",right:14,top:"50%",transform:"translateY(-50%)",color:"#555",fontSize:12}}>checking...</div>}
+                    </div>
+                    {usernameStatus==="available"&&<div style={{color:Up,fontSize:12,marginBottom:12}}>@{newUsername} is available!</div>}
+                    {usernameStatus==="taken"&&<div style={{color:Down,fontSize:12,marginBottom:12}}>@{newUsername} is taken. Try another.</div>}
+                    <div style={{color:"#444",fontSize:12,marginBottom:16}}>You can only change your username once every 30 days.</div>
+                    <div style={{opacity:usernameStatus==="available"?1:0.4}}>
+                      <Btn label="Update Username" onClick={saveUsername}/>
+                    </div>
+                  </>
+                ):(
+                  <div style={{color:"#444",fontSize:13,lineHeight:1.6}}>You changed your username recently. You can change it again in <span style={{color:Gold,fontWeight:"bold"}}>{daysUntilChange} days</span>.</div>
+                )}
+              </Card2>
+            </div>
           )}
-          {tab==="security"&&(
-            <Card2>
-              <SectionLabel text="Account"/>
-              <div style={{color:"#555",fontSize:14,marginBottom:20,lineHeight:1.6}}>Signed in with Google. Password management is handled through your Google account.</div>
-              <div style={{background:`${Down}0a`,border:`1px solid ${Down}22`,borderRadius:12,padding:"20px"}}>
-                <div style={{color:"#fff",fontWeight:"bold",marginBottom:6}}>Delete Account</div>
-                <div style={{color:"#555",fontSize:13,marginBottom:14,lineHeight:1.6}}>Permanently delete your account and all game history. This cannot be undone.</div>
-                <div style={{background:`${Down}18`,border:`1px solid ${Down}44`,borderRadius:10,padding:"12px",textAlign:"center",color:Down,fontWeight:"bold",fontSize:14,cursor:"pointer"}}>Delete My Account</div>
-              </div>
-            </Card2>
+
+          {tab==="account"&&(
+            <div>
+              {/* Email */}
+              <Card2 style={{marginBottom:16}}>
+                <SectionLabel text="Email"/>
+                <div style={{background:BG,border:`1px solid ${Border}`,borderRadius:10,padding:"12px 16px",color:"#888",fontSize:15,marginBottom:6,fontFamily:"monospace"}}>{profile.email||"—"}</div>
+                <div style={{color:"#444",fontSize:12}}>Associated with your Google account</div>
+              </Card2>
+
+              {/* Sign-in method */}
+              <Card2 style={{marginBottom:16}}>
+                <SectionLabel text="Sign-in Method"/>
+                <div style={{display:"flex",alignItems:"center",gap:14,padding:"14px 0",borderBottom:`1px solid ${Border}`}}>
+                  <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+                  <div style={{flex:1}}><div style={{color:"#fff",fontSize:14,fontWeight:"bold"}}>Google</div><div style={{color:"#555",fontSize:12}}>Signed in via Google OAuth</div></div>
+                  <span style={{color:Up,fontSize:12,fontFamily:"monospace"}}>Active</span>
+                </div>
+                <div style={{color:"#444",fontSize:12,marginTop:12,lineHeight:1.6}}>You're signed in with Google. To change your password, visit your Google account settings.</div>
+              </Card2>
+
+              {/* Delete account */}
+              <Card2>
+                <SectionLabel text="Danger Zone"/>
+                <div style={{background:`${Down}0a`,border:`1px solid ${Down}22`,borderRadius:12,padding:"20px"}}>
+                  <div style={{color:"#fff",fontWeight:"bold",marginBottom:6,fontSize:15}}>Delete Account</div>
+                  <div style={{color:"#555",fontSize:13,marginBottom:14,lineHeight:1.6}}>Permanently delete your account and all game history. This cannot be undone.</div>
+                  {!confirmDelete?(
+                    <div onClick={()=>setConfirmDelete(true)} style={{background:`${Down}18`,border:`1px solid ${Down}44`,borderRadius:10,padding:"12px",textAlign:"center",color:Down,fontWeight:"bold",fontSize:14,cursor:"pointer"}}>Delete My Account</div>
+                  ):(
+                    <div>
+                      <div style={{color:Down,fontSize:13,marginBottom:12,fontWeight:"bold"}}>Are you sure? This cannot be undone.</div>
+                      <div style={{display:"flex",gap:10}}>
+                        <div onClick={()=>setConfirmDelete(false)} style={{flex:1,background:Card,border:`1px solid ${Border}`,borderRadius:10,padding:"10px",textAlign:"center",color:"#888",fontWeight:"bold",fontSize:13,cursor:"pointer"}}>Cancel</div>
+                        <div style={{flex:1,background:`${Down}33`,border:`1px solid ${Down}`,borderRadius:10,padding:"10px",textAlign:"center",color:Down,fontWeight:"bold",fontSize:13,cursor:"pointer"}}>Yes, Delete</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </Card2>
+            </div>
           )}
+
           {tab==="privacy"&&(
             <Card2>
               <SectionLabel text="Profile Visibility"/>
