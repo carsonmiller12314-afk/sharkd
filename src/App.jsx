@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 // ─── FIREBASE ────────────────────────────────────────────────────────────────
 // Firebase is loaded via CDN scripts in index.html
@@ -1189,20 +1189,114 @@ function GameDetailScreen({nav,game,chats,addChat,profile,onEdit}){
 }
 
 // ─── STATS ───────────────────────────────────────────────────────────────────
+function InteractiveChart({myGames,period}){
+  const ref=useRef(null);
+  const chartRef=useRef(null);
+  const ptsRef=useRef([]);
+  const hoveringRef=useRef(false);
+  const totalRef=useRef(0);
+  const colorRef=useRef(Up);
+  const [chartLoaded,setChartLoaded]=useState(!!window.ChartJS);
+  useEffect(()=>{
+    if(window.ChartJS){setChartLoaded(true);return;}
+    const script=document.createElement("script");
+    script.src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js";
+    script.onload=()=>{window.ChartJS=window.Chart;setChartLoaded(true);};
+    document.head.appendChild(script);
+  },[]);
+
+  function buildPts(games,pd){
+    const now=new Date();
+    const days={"1W":7,"1M":30,"3M":90,"1Y":365,"ALL":9999}[pd]||30;
+    const cutoff=new Date(now);cutoff.setDate(cutoff.getDate()-days);
+    const filtered=games.filter(g=>{const d=parseGameDate(g.date);return d>=cutoff;}).sort((a,b)=>parseGameDate(a.date)-parseGameDate(b.date));
+    let r=0;const pts=[{label:"",value:0,net:null}];
+    filtered.forEach(g=>{r+=g.net;pts.push({label:g.date,value:r,net:g.net});});
+    return pts;
+  }
+
+  useEffect(()=>{
+    if(!ref.current||!chartLoaded||!window.ChartJS)return;
+    const pts=buildPts(myGames,period);
+    ptsRef.current=pts;
+    const vals=pts.map(p=>p.value);
+    const total=vals[vals.length-1]||0;
+    totalRef.current=total;
+    const color=total>=0?Up:Down;
+    colorRef.current=color;
+
+    const ctx=ref.current.getContext("2d");
+    const grad=ctx.createLinearGradient(0,0,0,220);
+    grad.addColorStop(0,color+"30");grad.addColorStop(1,color+"02");
+
+    const crosshairPlugin={
+      id:"crosshair",
+      afterDraw(ch){
+        if(ch.tooltip._active&&ch.tooltip._active.length){
+          const cx=ch.ctx,x=ch.tooltip._active[0].element.x;
+          const top=ch.chartArea.top,bottom=ch.chartArea.bottom;
+          cx.save();cx.beginPath();cx.moveTo(x,top);cx.lineTo(x,bottom);
+          cx.lineWidth=1;cx.strokeStyle="#c9a84c55";cx.setLineDash([4,4]);cx.stroke();cx.restore();
+        }
+      }
+    };
+
+    if(chartRef.current)chartRef.current.destroy();
+    chartRef.current=new window.ChartJS(ref.current,{
+      type:"line",plugins:[crosshairPlugin],
+      data:{labels:pts.map(p=>p.label),datasets:[{data:vals,borderColor:color,borderWidth:2.5,pointRadius:0,pointHoverRadius:0,tension:0.35,fill:true,backgroundColor:grad}]},
+      options:{
+        responsive:true,maintainAspectRatio:false,
+        interaction:{mode:"index",intersect:false},
+        plugins:{legend:{display:false},tooltip:{enabled:false,external:(ctx2)=>{
+          const tip=ctx2.tooltip;
+          const bigEl=document.getElementById("stat-big-num");
+          const tipEl=document.getElementById("stat-tip");
+          if(!bigEl||!tipEl)return;
+          if(tip.opacity===0){hoveringRef.current=false;bigEl.textContent=(totalRef.current>=0?"+":"")+`$${totalRef.current}`;bigEl.style.color=colorRef.current;tipEl.innerHTML="";return;}
+          const idx=tip.dataPoints?.[0]?.dataIndex;
+          if(idx==null||idx===0){return;}
+          hoveringRef.current=true;
+          const p=ptsRef.current[idx];
+          const sg=p.net>=0?"+":"",st=p.value>=0?"+":"";
+          const gc=p.net>=0?Up:Down,tc=p.value>=0?Up:Down;
+          bigEl.textContent=`${st}$${p.value}`;bigEl.style.color=tc;
+          tipEl.innerHTML=`<span style="color:#c9a84c">${p.label}</span> &nbsp;·&nbsp; game: <span style="color:${gc};font-weight:bold">${sg}$${p.net}</span> &nbsp;·&nbsp; total: <span style="color:${tc};font-weight:bold">${st}$${p.value}</span>`;
+        }}},
+        scales:{
+          x:{grid:{color:"#ffffff05"},ticks:{color:"#333",font:{size:10},maxTicksLimit:6}},
+          y:{grid:{color:"#ffffff05"},ticks:{color:"#333",font:{size:10},callback:v=>(v>=0?"+":"")+`$${Math.round(v)}`}}
+        }
+      }
+    });
+    ref.current.addEventListener("mouseleave",()=>{
+      hoveringRef.current=false;
+      const bigEl=document.getElementById("stat-big-num");
+      const tipEl=document.getElementById("stat-tip");
+      if(bigEl){bigEl.textContent=(totalRef.current>=0?"+":"")+`$${totalRef.current}`;bigEl.style.color=colorRef.current;}
+      if(tipEl)tipEl.innerHTML="";
+    });
+    return()=>{if(chartRef.current)chartRef.current.destroy();};
+  },[myGames,period,chartLoaded]);
+
+  return <canvas ref={ref}/>;
+}
+
 function StatsScreen({profile,nav,myGames,myStats,myScore,myRank}){
-  const isMobile=useIsMobile();  const [period,setPeriod]=useState("1M");
+  const isMobile=useIsMobile();
+  const [period,setPeriod]=useState("1M");
   const PERIODS=["1W","1M","3M","1Y","ALL"];
   const cutoffs={"1W":7,"1M":30,"3M":90,"1Y":365,"ALL":9999};
   const now=new Date(),cutoff=new Date(now);cutoff.setDate(cutoff.getDate()-cutoffs[period]);
-  const pg=myGames.filter(g=>{const d=new Date(g.date);return!isNaN(d)&&d>=cutoff;});
+  const pg=myGames.filter(g=>{const d=parseGameDate(g.date);return d>=cutoff;});
+  const allTimeNet=myGames.reduce((s,g)=>s+g.net,0);
   const totalNet=pg.reduce((s,g)=>s+g.net,0);
   const wins=pg.filter(g=>g.net>0).length,losses=pg.filter(g=>g.net<0).length;
   const winRate=pg.length?Math.round((wins/pg.length)*100):0;
-  const bestWin=pg.length?Math.max(...pg.map(g=>g.net)):0;
-  const worstLoss=pg.length?Math.min(...pg.map(g=>g.net)):0;
+  const bestWin=myGames.length?Math.max(...myGames.map(g=>g.net)):0;
+  const worstLoss=myGames.length?Math.min(...myGames.map(g=>g.net)):0;
   const avgPerGame=pg.length?Math.round(totalNet/pg.length):0;
-  const chartData=buildChartFromGames(myGames,period);
-  const isUp=totalNet>=0,color=isUp?Up:Down;
+  const color=allTimeNet>=0?Up:Down;
   const nextIdx=RANKS.findIndex(r=>r.tier===myRank.tier)+1,nextRank=RANKS[nextIdx]||null;
   const rankPct=nextRank?((myScore-myRank.min)/(myRank.max-myRank.min))*100:100;
 
@@ -1210,31 +1304,44 @@ function StatsScreen({profile,nav,myGames,myStats,myScore,myRank}){
     <MainContent isMobile={isMobile}>
       <PageHeader title="My Stats" subtitle="Your poker performance over time"/>
 
-      {/* Period selector */}
-      <div style={{display:"flex",gap:8,marginBottom:24}}>
-        {PERIODS.map(p=>(
-          <div key={p} onClick={()=>setPeriod(p)} style={{padding:"8px 20px",borderRadius:10,cursor:"pointer",background:period===p?color:"transparent",color:period===p?BG:"#555",border:`1px solid ${period===p?color:Border}`,fontWeight:"bold",fontSize:13,fontFamily:"monospace",transition:"all .2s"}}>{p}</div>
-        ))}
-      </div>
-
-      {/* Top stats */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:16,marginBottom:24}}>
-        <StatBox label={period==="ALL"?"All-Time Net":"Period Net"} value={`${totalNet>=0?"+":""}$${totalNet}`} color={totalNet>=0?Up:Down}/>
-        <StatBox label="Win Rate" value={`${winRate}%`} color={winRate>=50?Up:Down} sub={`${wins}W / ${losses}L`}/>
-        <StatBox label="Best Win" value={`+$${bestWin}`} color={Up}/>
-        <StatBox label="Worst Loss" value={`$${worstLoss}`} color={Down}/>
-      </div>
-
-      {/* Chart */}
-      <Card2 style={{marginBottom:24}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-          <SectionLabel text="Profit Chart"/>
-          <div style={{color,fontSize:24,fontWeight:"bold",fontFamily:"monospace"}}>{totalNet>=0?"+":""}${totalNet}</div>
+      {/* Glass chart card */}
+      <div style={{background:`linear-gradient(135deg,#0d0d20,#080812)`,border:`1px solid #ffffff08`,borderRadius:20,padding:24,marginBottom:24}}>
+        {/* Header row */}
+        <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:20}}>
+          <div style={{background:`${Gold}18`,border:`1px solid ${Gold}33`,borderRadius:10,padding:"6px 12px",color:Gold,fontSize:11,fontFamily:"monospace",letterSpacing:2}}>SHARKD</div>
+          <div>
+            <div id="stat-big-num" style={{fontSize:38,fontWeight:"bold",fontFamily:"monospace",color,transition:"color .1s"}}>{allTimeNet>=0?"+":""}${allTimeNet}</div>
+            <div style={{color:"#555",fontSize:12,marginTop:2}}>all-time profit · {myGames.length} games</div>
+          </div>
         </div>
-        <StockChart data={chartData} color={color} width={760} height={220}/>
-      </Card2>
 
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20}}>
+        {/* Mini stats */}
+        <div style={{display:"flex",gap:20,borderTop:`1px solid #1c1c2e`,borderBottom:`1px solid #1c1c2e`,padding:"12px 0",marginBottom:16,flexWrap:"wrap"}}>
+          {[{lbl:"WIN RATE",val:`${winRate}%`,col:winRate>=50?Up:Down},{lbl:"BEST WIN",val:`+$${bestWin}`,col:Up},{lbl:"WORST LOSS",val:`-$${Math.abs(worstLoss)}`,col:Down},{lbl:"GAMES",val:myGames.length,col:"#fff"}].map(s=>(
+            <div key={s.lbl}>
+              <div style={{color:"#444",fontSize:11,fontFamily:"monospace",marginBottom:2}}>{s.lbl}</div>
+              <div style={{fontSize:15,fontWeight:"bold",fontFamily:"monospace",color:s.col}}>{s.val}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Period pills */}
+        <div style={{display:"flex",gap:4,marginBottom:14}}>
+          {PERIODS.map(p=>(
+            <div key={p} onClick={()=>setPeriod(p)} style={{padding:"6px 14px",borderRadius:6,cursor:"pointer",background:period===p?"#ffffff0a":"transparent",color:period===p?"#fff":"#555",fontSize:12,fontFamily:"monospace",transition:"all .15s"}}>{p}</div>
+          ))}
+        </div>
+
+        {/* Hover tip */}
+        <div id="stat-tip" style={{fontSize:12,color:"#444",fontFamily:"monospace",minHeight:18,marginBottom:10}}></div>
+
+        {/* Chart */}
+        <div style={{position:"relative",height:220}}>
+          <InteractiveChart myGames={myGames} period={period}/>
+        </div>
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:20}}>
         {/* Game breakdown */}
         <Card2>
           <SectionLabel text="Game Breakdown"/>
@@ -1247,7 +1354,7 @@ function StatsScreen({profile,nav,myGames,myStats,myScore,myRank}){
                 </div>
               ))}
               <div style={{height:6,background:Border,borderRadius:3,overflow:"hidden",marginTop:16}}>
-                <div style={{height:"100%",width:`${winRate}%`,background:`linear-gradient(90deg,${Up},#00b37a)`,borderRadius:3}}/>
+                <div style={{height:"100%",width:`${winRate}%`,background:Up,borderRadius:3}}/>
               </div>
               <div style={{display:"flex",justifyContent:"space-between",marginTop:6}}>
                 <span style={{color:Up,fontSize:11}}>{winRate}% wins</span>
@@ -1601,23 +1708,77 @@ function FeedScreen({nav,feedItems}){
 }
 
 // ─── ADD FRIENDS ─────────────────────────────────────────────────────────────
-function AddFriendsScreen({nav,showToast,friends}){
-  const isMobile=useIsMobile();  const [search,setSearch]=useState("");
+function AddFriendsScreen({nav,showToast,friends,setFriends,profile}){
+  const isMobile=useIsMobile();
+  const [search,setSearch]=useState("");
+  const [results,setResults]=useState([]);
+  const [searching,setSearching]=useState(false);
+  const [sent,setSent]=useState({});
+
+  const doSearch=async()=>{
+    const q=search.trim().toLowerCase().replace(/^@/,"");
+    if(!q||q.length<3)return;
+    setSearching(true);
+    setResults([]);
+    try{
+      const app=getFirebase();
+      if(!app)throw new Error("no firebase");
+      const db=window.firebase_firestore.getFirestore(app);
+      const snap=await window.firebase_firestore.getDocs(
+        window.firebase_firestore.query(
+          window.firebase_firestore.collection(db,"users"),
+          window.firebase_firestore.where("username","==",q)
+        )
+      );
+      const found=snap.docs.map(d=>({id:d.id,...d.data()})).filter(u=>u.username!==profile.username);
+      setResults(found);
+    }catch(e){console.error(e);}
+    setSearching(false);
+  };
+
+  const addFriend=(u)=>{
+    const colors=["#a78bfa","#34d399","#fb923c","#f472b6","#38bdf8","#facc15"];
+    const newFriend={id:u.id,name:u.fullName||u.username,username:u.username,avatar:u.username?.[0]?.toUpperCase()||"?",color:colors[friends.length%colors.length],allTime:0,venmo:u.venmo||""};
+    setFriends(prev=>[...prev,newFriend]);
+    setSent(s=>({...s,[u.id]:true}));
+    showToast(`✓ ${u.username} added as friend!`);
+  };
+
   return(
     <MainContent isMobile={isMobile}>
-      <PageHeader title="Add Friends" subtitle="Find players to connect with"/>
+      <PageHeader title="Add Friends" subtitle="Find players by their Sharkd username"/>
       <div style={{maxWidth:600}}>
-        <div style={{marginBottom:24}}>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search by username..." autoFocus style={{width:"100%",background:Card,border:`1px solid ${Border}`,borderRadius:12,padding:"13px 16px",color:"#fff",fontSize:15,outline:"none",boxSizing:"border-box"}}/>
+        <div style={{display:"flex",gap:8,marginBottom:24}}>
+          <input value={search} onChange={e=>setSearch(e.target.value)} onKeyDown={e=>e.key==="Enter"&&doSearch()} placeholder="Search @username..." autoFocus style={{flex:1,background:Card,border:`1px solid ${Border}`,borderRadius:12,padding:"13px 16px",color:"#fff",fontSize:15,outline:"none",boxSizing:"border-box"}}/>
+          <div onClick={doSearch} style={{background:`${Gold}22`,border:`1px solid ${Gold}44`,borderRadius:12,padding:"13px 20px",color:Gold,fontWeight:"bold",fontSize:14,cursor:"pointer",whiteSpace:"nowrap"}}>{searching?"...":"Search"}</div>
         </div>
-        {search.length>0&&(
+        {searching&&<Card2 style={{textAlign:"center",padding:"32px",marginBottom:16}}><div style={{color:"#555",fontSize:14}}>Searching...</div></Card2>}
+        {!searching&&results.length>0&&results.map(u=>{
+          const alreadyFriend=friends.find(f=>f.id===u.id);
+          return(
+            <div key={u.id} style={{display:"flex",alignItems:"center",gap:12,padding:"14px 20px",background:Card,border:`1px solid ${Border}`,borderRadius:14,marginBottom:10}}>
+              <div style={{width:44,height:44,borderRadius:"50%",background:`${Gold}22`,border:`2px solid ${Gold}44`,display:"flex",alignItems:"center",justifyContent:"center",color:Gold,fontWeight:"bold",fontSize:18}}>{u.username?.[0]?.toUpperCase()||"?"}</div>
+              <div style={{flex:1}}>
+                <div style={{color:"#fff",fontWeight:"bold",fontSize:15}}>{u.fullName||u.username}</div>
+                <div style={{color:"#444",fontSize:12,fontFamily:"monospace"}}>@{u.username}</div>
+              </div>
+              {alreadyFriend?
+                <div style={{color:"#555",fontSize:13,fontFamily:"monospace"}}>Already friends</div>:
+                sent[u.id]?
+                <div style={{color:Up,fontSize:13,fontFamily:"monospace"}}>✓ Added</div>:
+                <div onClick={()=>addFriend(u)} style={{background:`${Gold}22`,border:`1px solid ${Gold}44`,borderRadius:10,padding:"9px 18px",color:Gold,fontSize:13,fontWeight:"bold",cursor:"pointer"}}>+ Add</div>
+              }
+            </div>
+          );
+        })}
+        {!searching&&search.length>0&&results.length===0&&(
           <Card2 style={{textAlign:"center",padding:"32px",marginBottom:16}}>
             <div style={{fontSize:32,marginBottom:8}}>🔍</div>
-            <div style={{color:"#555",fontSize:14}}>No users found for "{search}"</div>
-            <div style={{color:"#444",fontSize:12,marginTop:6}}>Make sure you have the exact username</div>
+            <div style={{color:"#555",fontSize:14}}>No user found for "@{search.replace(/^@/,"")}"</div>
+            <div style={{color:"#444",fontSize:12,marginTop:6}}>Make sure it's their exact Sharkd username</div>
           </Card2>
         )}
-        {search.length===0&&(
+        {search.length===0&&results.length===0&&(
           <Card2 style={{textAlign:"center",padding:"32px",marginBottom:16}}>
             <div style={{fontSize:32,marginBottom:8}}>👥</div>
             <div style={{color:"#555",fontSize:14}}>Search for a player by their Sharkd username</div>
@@ -1969,7 +2130,7 @@ export default function App(){
         {screen===S.RANK          &&<RankScreen           nav={nav} profile={profile} myStats={myStats} myScore={myScore} myRank={myRank}/>}
         {screen===S.FRIENDS       &&<FriendsScreen        nav={nav} profile={profile} friends={friends} setFriends={setFriends} setSelectedFriend={setSelectedFriend}/>}
         {screen===S.FRIEND_PROFILE&&<FriendProfileScreen  nav={nav} friend={selectedFriend} fromScreen={prevScreen} profile={profile}/>}
-        {screen===S.ADD_FRIENDS   &&<AddFriendsScreen     nav={nav} showToast={showToast} friends={friends}/>}
+        {screen===S.ADD_FRIENDS   &&<AddFriendsScreen     nav={nav} showToast={showToast} friends={friends} setFriends={setFriends} profile={profile}/>}
         {screen===S.LEADERBOARD   &&<LeaderboardScreen    nav={nav} profile={profile} friends={friends} myGames={myGames} setSelectedFriend={setSelectedFriend} setSelectedWorldPlayer={setSelectedWorldPlayer}/>}
         {screen===S.GROUPS        &&<GroupsScreen         nav={nav} groups={groups} setGroups={setGroups} myGames={myGames} setSelectedGroup={setSelectedGroup} friends={friends}/>}
         {screen===S.GROUP_DETAIL  &&<GroupDetailScreen    nav={nav} group={selectedGroup} myGames={myGames} setSelectedGame={setSelectedGame} friends={friends}/>}
