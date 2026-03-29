@@ -110,6 +110,153 @@ async function loadGames(uid){
   }catch(e){console.error("loadGames:",e);return[];}
 }
 
+// ─── FIREBASE: DEBTS, GROUPS, SETTLED ────────────────────────────────────────
+async function saveDebt(uid,debt){
+  try{
+    const app=getFirebase();if(!app)return;
+    const db=window.firebase_firestore.getFirestore(app);
+    await window.firebase_firestore.setDoc(window.firebase_firestore.doc(db,"users",uid,"debts",String(debt.id)),debt);
+  }catch(e){console.error("saveDebt:",e);}
+}
+async function deleteDebt(uid,debtId){
+  try{
+    const app=getFirebase();if(!app)return;
+    const db=window.firebase_firestore.getFirestore(app);
+    await window.firebase_firestore.deleteDoc(window.firebase_firestore.doc(db,"users",uid,"debts",String(debtId)));
+  }catch(e){console.error("deleteDebt:",e);}
+}
+async function loadDebts(uid){
+  try{
+    const app=getFirebase();if(!app)return[];
+    const db=window.firebase_firestore.getFirestore(app);
+    const snap=await window.firebase_firestore.getDocs(window.firebase_firestore.collection(db,"users",uid,"debts"));
+    return snap.docs.map(d=>d.data());
+  }catch(e){console.error("loadDebts:",e);return[];}
+}
+async function saveSettled(uid,item){
+  try{
+    const app=getFirebase();if(!app)return;
+    const db=window.firebase_firestore.getFirestore(app);
+    await window.firebase_firestore.setDoc(window.firebase_firestore.doc(db,"users",uid,"settled",String(item.id)),item);
+  }catch(e){console.error("saveSettled:",e);}
+}
+async function loadSettled(uid){
+  try{
+    const app=getFirebase();if(!app)return[];
+    const db=window.firebase_firestore.getFirestore(app);
+    const snap=await window.firebase_firestore.getDocs(window.firebase_firestore.collection(db,"users",uid,"settled"));
+    return snap.docs.map(d=>d.data()).sort((a,b)=>b.id-a.id);
+  }catch(e){console.error("loadSettled:",e);return[];}
+}
+async function saveGroup(uid,group){
+  try{
+    const app=getFirebase();if(!app)return;
+    const db=window.firebase_firestore.getFirestore(app);
+    await window.firebase_firestore.setDoc(window.firebase_firestore.doc(db,"users",uid,"groups",String(group.id)),group);
+  }catch(e){console.error("saveGroup:",e);}
+}
+async function loadGroups(uid){
+  try{
+    const app=getFirebase();if(!app)return[];
+    const db=window.firebase_firestore.getFirestore(app);
+    const snap=await window.firebase_firestore.getDocs(window.firebase_firestore.collection(db,"users",uid,"groups"));
+    return snap.docs.map(d=>d.data());
+  }catch(e){console.error("loadGroups:",e);return[];}
+}
+
+// ─── FIREBASE: FRIENDS & CHATS ───────────────────────────────────────────────
+async function saveFriend(uid,friend){
+  try{
+    const app=getFirebase();if(!app)return;
+    const db=window.firebase_firestore.getFirestore(app);
+    await window.firebase_firestore.setDoc(
+      window.firebase_firestore.doc(db,"users",uid,"friends",String(friend.id)),
+      friend
+    );
+  }catch(e){console.error("saveFriend:",e);}
+}
+async function loadFriends(uid){
+  try{
+    const app=getFirebase();if(!app)return[];
+    const db=window.firebase_firestore.getFirestore(app);
+    const snap=await window.firebase_firestore.getDocs(
+      window.firebase_firestore.collection(db,"users",uid,"friends")
+    );
+    return snap.docs.map(d=>d.data());
+  }catch(e){console.error("loadFriends:",e);return[];}
+}
+async function removeFriend(uid,friendId){
+  try{
+    const app=getFirebase();if(!app)return;
+    const db=window.firebase_firestore.getFirestore(app);
+    await window.firebase_firestore.deleteDoc(
+      window.firebase_firestore.doc(db,"users",uid,"friends",String(friendId))
+    );
+  }catch(e){console.error("removeFriend:",e);}
+}
+async function sendFriendRequest(fromUid,fromUsername,fromFullName,toUid){
+  try{
+    const app=getFirebase();if(!app)return;
+    const db=window.firebase_firestore.getFirestore(app);
+    const reqId=fromUid+"_"+toUid;
+    await window.firebase_firestore.setDoc(
+      window.firebase_firestore.doc(db,"users",toUid,"friendRequests",reqId),
+      {fromUid,fromUsername,fromFullName,toUid,status:"pending",sentAt:new Date().toISOString(),reqId}
+    );
+  }catch(e){console.error("sendFriendRequest:",e);}
+}
+async function loadFriendRequests(uid){
+  try{
+    const app=getFirebase();if(!app)return[];
+    const db=window.firebase_firestore.getFirestore(app);
+    const snap=await window.firebase_firestore.getDocs(
+      window.firebase_firestore.collection(db,"users",uid,"friendRequests")
+    );
+    return snap.docs.map(d=>d.data()).filter(r=>r.status==="pending");
+  }catch(e){console.error("loadFriendRequests:",e);return[];}
+}
+async function acceptFriendRequest(myUid,myUsername,myFullName,req,myGames){
+  try{
+    const app=getFirebase();if(!app)return;
+    const db=window.firebase_firestore.getFirestore(app);
+    const colors=["#a78bfa","#34d399","#fb923c","#f472b6","#38bdf8","#facc15"];
+    const col=colors[Math.floor(Math.random()*colors.length)];
+    const friendForMe={id:req.fromUid,name:req.fromFullName||req.fromUsername,username:req.fromUsername,avatar:req.fromUsername?.[0]?.toUpperCase()||"?",color:col,allTime:0,venmo:""};
+    const friendForThem={id:myUid,name:myFullName||myUsername,username:myUsername,avatar:myUsername?.[0]?.toUpperCase()||"?",color:col,allTime:0,venmo:""};
+    await saveFriend(myUid,friendForMe);
+    await saveFriend(req.fromUid,friendForThem);
+    await window.firebase_firestore.deleteDoc(
+      window.firebase_firestore.doc(db,"users",myUid,"friendRequests",req.reqId)
+    );
+    return friendForMe;
+  }catch(e){console.error("acceptFriendRequest:",e);return null;}
+}
+async function saveChat(uid,friendId,msg){
+  try{
+    const app=getFirebase();if(!app)return;
+    const db=window.firebase_firestore.getFirestore(app);
+    const chatId=[uid,friendId].sort().join("_");
+    await window.firebase_firestore.addDoc(
+      window.firebase_firestore.collection(db,"chats",chatId,"messages"),
+      {...msg,ts:new Date().toISOString()}
+    );
+  }catch(e){console.error("saveChat:",e);}
+}
+async function loadChat(uid,friendId){
+  try{
+    const app=getFirebase();if(!app)return[];
+    const db=window.firebase_firestore.getFirestore(app);
+    const chatId=[uid,friendId].sort().join("_");
+    const snap=await window.firebase_firestore.getDocs(
+      window.firebase_firestore.query(
+        window.firebase_firestore.collection(db,"chats",chatId,"messages"),
+        window.firebase_firestore.orderBy("ts","asc")
+      )
+    );
+    return snap.docs.map(d=>d.data());
+  }catch(e){console.error("loadChat:",e);return[];}
+}
+
 // ─── SCREENS ──────────────────────────────────────────────────────────────────
 const S = {
   LANDING:"landing", LOGIN:"login",
@@ -631,13 +778,13 @@ function HomeScreen({nav,profile,debts,notifs,myGames,setSelectedDebt}){
                 {owing.map(d=>(
                   <div key={d.id} onClick={()=>{setSelectedDebt(d);nav(S.CONFIRM_PAY);}} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 16px",background:`${Down}0a`,border:`1px solid ${Down}22`,borderRadius:10,marginBottom:8,cursor:"pointer"}}>
                     <div><div style={{color:"#fff",fontSize:14}}>You → {d.to}</div><div style={{color:"#555",fontSize:12,marginTop:2}}>{d.game}</div></div>
-                    <div style={{color:Down,fontWeight:"bold",fontSize:16}}>-${d.amount}</div>
+                    <div style={{color:Down,fontWeight:"bold",fontSize:16}}>-${Number(d.amount).toFixed(2)}</div>
                   </div>
                 ))}
                 {owed.map(d=>(
                   <div key={d.id} onClick={()=>nav(S.SETTLEMENTS)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 16px",background:`${Up}0a`,border:`1px solid ${Up}22`,borderRadius:10,marginBottom:8,cursor:"pointer"}}>
                     <div><div style={{color:"#fff",fontSize:14}}>{d.from} → You</div><div style={{color:"#555",fontSize:12,marginTop:2}}>{d.game}</div></div>
-                    <div style={{color:Up,fontWeight:"bold",fontSize:16}}>+${d.amount}</div>
+                    <div style={{color:Up,fontWeight:"bold",fontSize:16}}>+${Number(d.amount).toFixed(2)}</div>
                   </div>
                 ))}
               </div>
@@ -991,14 +1138,14 @@ function SettlementsScreen({nav,debts,settleDebt,showToast,settledHistory,setSel
                 {owing.map(d=>(
                   <div key={d.id} onClick={()=>{setSelectedDebt(d);nav(S.CONFIRM_PAY);}} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"16px 20px",background:Card,border:`1px solid ${Down}33`,borderRadius:14,marginBottom:10,cursor:"pointer"}}>
                     <div><div style={{color:"#fff",fontSize:15,fontWeight:"bold"}}>You → {d.to}</div><div style={{color:"#555",fontSize:12,marginTop:3}}>{d.game}</div></div>
-                    <div style={{textAlign:"right"}}><div style={{color:Down,fontSize:22,fontWeight:"bold"}}>${d.amount}</div><div style={{color:Down,fontSize:12,marginTop:4}}>Tap to mark paid →</div></div>
+                    <div style={{textAlign:"right"}}><div style={{color:Down,fontSize:22,fontWeight:"bold"}}>${Number(d.amount).toFixed(2)}</div><div style={{color:Down,fontSize:12,marginTop:4}}>Tap to mark paid →</div></div>
                   </div>
                 ))}</>}
               {owed.length>0&&<><SectionLabel text="Owed to You" style={{marginTop:20}}/>
                 {owed.map(d=>(
-                  <div key={d.id} onClick={()=>{settleDebt(d.id);showToast(`✓ Confirmed $${d.amount} from ${d.from}!`);}} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"16px 20px",background:Card,border:`1px solid ${Up}33`,borderRadius:14,marginBottom:10,cursor:"pointer"}}>
+                  <div key={d.id} onClick={()=>{settleDebt(d.id);showToast(`✓ Confirmed $$${Number(d.amount).toFixed(2)} from ${d.from}!`);}} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"16px 20px",background:Card,border:`1px solid ${Up}33`,borderRadius:14,marginBottom:10,cursor:"pointer"}}>
                     <div><div style={{color:"#fff",fontSize:15,fontWeight:"bold"}}>{d.from} → You</div><div style={{color:"#555",fontSize:12,marginTop:3}}>{d.game}</div><div style={{color:Up,fontSize:12,marginTop:4}}>Tap anywhere to confirm received</div></div>
-                    <div style={{textAlign:"right"}}><div style={{color:Up,fontSize:22,fontWeight:"bold"}}>${d.amount}</div></div>
+                    <div style={{textAlign:"right"}}><div style={{color:Up,fontSize:22,fontWeight:"bold"}}>${Number(d.amount).toFixed(2)}</div></div>
                   </div>
                 ))}</>}
             </>
@@ -1011,7 +1158,7 @@ function SettlementsScreen({nav,debts,settleDebt,showToast,settledHistory,setSel
           {settledHistory.map(d=>(
             <div key={d.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",background:Card,border:`1px solid ${Up}22`,borderRadius:14,marginBottom:10}}>
               <div><div style={{color:"#fff",fontSize:14,fontWeight:"bold"}}>{d.from==="You"?`You → ${d.to}`:`${d.from} → You`}</div><div style={{color:"#555",fontSize:12,marginTop:2}}>{d.game} · {d.date}</div></div>
-              <div style={{textAlign:"right"}}><div style={{color:d.from==="You"?Down:Up,fontWeight:"bold",fontSize:15}}>{d.from==="You"?"-":"+"}${d.amount}</div><Tag text="✓ Settled" color={Up}/></div>
+              <div style={{textAlign:"right"}}><div style={{color:d.from==="You"?Down:Up,fontWeight:"bold",fontSize:15}}>{d.from==="You"?"-":"+"}${Number(d.amount).toFixed(2)}</div><Tag text="✓ Settled" color={Up}/></div>
             </div>
           ))}
         </div>
@@ -1032,7 +1179,7 @@ function ConfirmPayScreen({nav,debt,showToast,settleDebt,friends,profile}){
         <Card2 style={{textAlign:"center",marginBottom:20,padding:"40px"}}>
           <div style={{fontSize:64,marginBottom:16}}>💸</div>
           <div style={{color:"#555",fontSize:16,marginBottom:8}}>You're paying</div>
-          <div style={{color:"#fff",fontSize:64,fontWeight:"bold",fontFamily:"monospace",lineHeight:1}}>${debt.amount}</div>
+          <div style={{color:"#fff",fontSize:64,fontWeight:"bold",fontFamily:"monospace",lineHeight:1}}>${Number(debt.amount).toFixed(2)}</div>
           <div style={{color:Gold,fontSize:22,marginTop:12}}>to {debt.to}</div>
           <div style={{color:"#555",fontSize:14,marginTop:6}}>{debt.game}</div>
           {theirVenmo&&(
@@ -1050,7 +1197,7 @@ function ConfirmPayScreen({nav,debt,showToast,settleDebt,friends,profile}){
         </Card2>
         <div style={{display:"flex",gap:12}}>
           <Btn label="← Back" onClick={()=>nav(S.SETTLEMENTS)} outline/>
-          <Btn label={`Mark $${debt.amount} as paid ✓`} onClick={()=>{settleDebt(debt.id);showToast(`✓ Sent to ${debt.to} for confirmation!`);nav(S.HOME);}} size="lg"/>
+          <Btn label={`Mark $$${Number(debt.amount).toFixed(2)} as paid ✓`} onClick={()=>{settleDebt(debt.id);showToast(`✓ Sent to ${debt.to} for confirmation!`);nav(S.HOME);}} size="lg"/>
         </div>
       </div>
     </MainContent>
@@ -1597,7 +1744,7 @@ function GroupsScreen({nav,groups,setGroups,myGames,setSelectedGroup,friends}){
             <input value={newName} onChange={e=>setNewName(e.target.value)} placeholder="e.g. Friday Night Crew" autoFocus style={{width:"100%",background:BG,border:`1px solid ${Border}`,borderRadius:10,padding:"12px 16px",color:"#fff",fontSize:15,boxSizing:"border-box",outline:"none",marginBottom:20}}/>
             <div style={{display:"flex",gap:12}}>
               <Btn label="Cancel" onClick={()=>setShowCreate(false)} outline/>
-              <div onClick={()=>{if(!newName.trim())return;setGroups(prev=>[...prev,{id:Date.now(),name:newName.trim(),emoji:"🃏",color:"#a78bfa",members:[],games:0,lastGame:"—"}]);setNewName("");setShowCreate(false);}} style={{flex:1,background:`linear-gradient(135deg,${Gold},${GoldDim})`,borderRadius:12,padding:"12px",textAlign:"center",color:BG,fontWeight:"bold",cursor:"pointer",fontSize:14}}>Create</div>
+              <div onClick={()=>{if(!newName.trim())return;const ng={id:Date.now(),name:newName.trim(),emoji:"🃏",color:"#a78bfa",members:[],games:0,lastGame:"—"};setGroups(prev=>[...prev,ng]);if(window._sharkdUid)saveGroup(window._sharkdUid,ng);setNewName("");setShowCreate(false);}} style={{flex:1,background:`linear-gradient(135deg,${Gold},${GoldDim})`,borderRadius:12,padding:"12px",textAlign:"center",color:BG,fontWeight:"bold",cursor:"pointer",fontSize:14}}>Create</div>
             </div>
           </div>
         </div>
@@ -1736,12 +1883,10 @@ function AddFriendsScreen({nav,showToast,friends,setFriends,profile}){
     setSearching(false);
   };
 
-  const addFriend=(u)=>{
-    const colors=["#a78bfa","#34d399","#fb923c","#f472b6","#38bdf8","#facc15"];
-    const newFriend={id:u.id,name:u.fullName||u.username,username:u.username,avatar:u.username?.[0]?.toUpperCase()||"?",color:colors[friends.length%colors.length],allTime:0,venmo:u.venmo||""};
-    setFriends(prev=>[...prev,newFriend]);
+  const addFriend=async(u)=>{
+    await sendFriendRequest(profile.uid,profile.username,profile.fullName||profile.username,u.id);
     setSent(s=>({...s,[u.id]:true}));
-    showToast(`✓ ${u.username} added as friend!`);
+    showToast(`✓ Friend request sent to @${u.username}!`);
   };
 
   return(
@@ -1765,8 +1910,8 @@ function AddFriendsScreen({nav,showToast,friends,setFriends,profile}){
               {alreadyFriend?
                 <div style={{color:"#555",fontSize:13,fontFamily:"monospace"}}>Already friends</div>:
                 sent[u.id]?
-                <div style={{color:Up,fontSize:13,fontFamily:"monospace"}}>✓ Added</div>:
-                <div onClick={()=>addFriend(u)} style={{background:`${Gold}22`,border:`1px solid ${Gold}44`,borderRadius:10,padding:"9px 18px",color:Gold,fontSize:13,fontWeight:"bold",cursor:"pointer"}}>+ Add</div>
+                <div style={{color:Up,fontSize:13,fontFamily:"monospace"}}>✓ Request Sent</div>:
+                <div onClick={()=>addFriend(u)} style={{background:`${Gold}22`,border:`1px solid ${Gold}44`,borderRadius:10,padding:"9px 18px",color:Gold,fontSize:13,fontWeight:"bold",cursor:"pointer"}}>Send Request</div>
               }
             </div>
           );
@@ -1795,8 +1940,28 @@ function AddFriendsScreen({nav,showToast,friends,setFriends,profile}){
 }
 
 // ─── NOTIFICATIONS ───────────────────────────────────────────────────────────
-function NotificationsScreen({nav,notifs,markAllRead}){
-  const isMobile=useIsMobile();  const icons={request:"💸",confirm:"✅",game:"🃏",friend:"👥",rival:"⚔️"};
+function NotificationsScreen({nav,notifs,markAllRead,setNotifs,setFriends,profile,showToast}){
+  const isMobile=useIsMobile();
+  const icons={request:"💸",confirm:"✅",game:"🃏",friend:"👥",rival:"⚔️",friendRequest:"👥"};
+
+  const handleAccept=async(n)=>{
+    const newFriend=await acceptFriendRequest(profile.uid,profile.username,profile.fullName||profile.username,n.req);
+    if(newFriend){
+      setFriends(prev=>[...prev,newFriend]);
+      setNotifs(prev=>prev.filter(x=>x.id!==n.id));
+      showToast(`✓ You and @${n.from} are now friends!`);
+    }
+  };
+  const handleDecline=async(n)=>{
+    try{
+      const app=getFirebase();if(!app)return;
+      const db=window.firebase_firestore.getFirestore(app);
+      await window.firebase_firestore.deleteDoc(window.firebase_firestore.doc(db,"users",profile.uid,"friendRequests",n.req.reqId));
+    }catch(e){}
+    setNotifs(prev=>prev.filter(x=>x.id!==n.id));
+    showToast("Friend request declined.");
+  };
+
   return(
     <MainContent isMobile={isMobile}>
       <PageHeader title="Notifications" action={notifs.some(n=>!n.read)?<Btn label="Mark all read" onClick={markAllRead} outline size="sm"/>:null}/>
@@ -1806,7 +1971,12 @@ function NotificationsScreen({nav,notifs,markAllRead}){
             <div key={n.id} style={{background:n.read?Card:`${Gold}08`,border:`1px solid ${n.read?Border:`${Gold}22`}`,borderRadius:14,padding:"16px 20px",marginBottom:10,display:"flex",alignItems:"center",gap:14}}>
               <div style={{width:44,height:44,borderRadius:"50%",background:n.read?"#1a1a2e":`${Gold}22`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>{icons[n.type]||"🔔"}</div>
               <div style={{flex:1}}><div style={{color:n.read?"#888":"#fff",fontSize:14,lineHeight:1.5}}>{n.msg}</div><div style={{color:"#555",fontSize:12,marginTop:3}}>{n.time}</div></div>
-              {!n.read&&<div style={{width:10,height:10,borderRadius:"50%",background:Gold,flexShrink:0}}/>}
+              {n.type==="friendRequest"?(
+                <div style={{display:"flex",gap:8}}>
+                  <div onClick={()=>handleAccept(n)} style={{background:`${Up}22`,border:`1px solid ${Up}44`,borderRadius:8,padding:"8px 14px",color:Up,fontWeight:"bold",fontSize:13,cursor:"pointer"}}>Accept</div>
+                  <div onClick={()=>handleDecline(n)} style={{background:`${Down}22`,border:`1px solid ${Down}44`,borderRadius:8,padding:"8px 14px",color:Down,fontWeight:"bold",fontSize:13,cursor:"pointer"}}>Decline</div>
+                </div>
+              ):(!n.read&&<div style={{width:10,height:10,borderRadius:"50%",background:Gold,flexShrink:0}}/>)}
             </div>
           ))
         }
@@ -1930,10 +2100,22 @@ function EditGameScreen({nav,game,editGame,profile}){
 // ─── FRIEND PROFILE ──────────────────────────────────────────────────────────
 function FriendProfileScreen({nav,friend,fromScreen,profile}){
   const isMobile=useIsMobile();  const [tab,setTab]=useState("stats"),[chatMsg,setChatMsg]=useState(""),[chatHistory,setChatHistory]=useState({});
+  useEffect(()=>{
+    if(!profile?.uid||!friend?.id)return;
+    loadChat(profile.uid,friend.id).then(msgs=>{
+      if(msgs.length>0)setChatHistory(prev=>({...prev,[friend.id]:msgs.map(m=>({...m,isMe:m.from===profile.username}))}));
+    });
+  },[friend?.id]);
   if(!friend){nav(fromScreen||S.FRIENDS);return null;}
   const score=calcScore({winRate:5,profitPerGame:5,roi:5,consistency:5,bigWinRate:5,gamesPlayed:friend.gamesPlayed||0});
   const rank=getRank(score);
-  const sendMsg=()=>{if(!chatMsg.trim())return;setChatHistory(prev=>({...prev,[friend.id]:[...(prev[friend.id]||[]),{id:Date.now(),from:profile.username||"You",msg:chatMsg.trim(),time:"Just now",isMe:true,color:Gold}]}));setChatMsg("");};
+  const sendMsg=()=>{
+    if(!chatMsg.trim())return;
+    const newMsg={id:Date.now(),from:profile.username||"You",msg:chatMsg.trim(),time:"Just now",isMe:true,color:Gold};
+    setChatHistory(prev=>({...prev,[friend.id]:[...(prev[friend.id]||[]),newMsg]}));
+    if(profile?.uid&&friend?.id)saveChat(profile.uid,friend.id,newMsg);
+    setChatMsg("");
+  };
   const msgs=chatHistory[friend.id]||[];
   return(
     <MainContent isMobile={isMobile}>
@@ -2033,9 +2215,20 @@ export default function App(){
       if(user){
         const existing=await loadUserProfile(user.uid);
         if(existing&&existing.username){
+          window._sharkdUid=user.uid;
           setProfile(p=>({...p,...existing,uid:user.uid,photoURL:user.photoURL||"",email:user.email||""}));
           const savedGames=await loadGames(user.uid);
           if(savedGames.length>0)setMyGames(savedGames);
+          const savedFriends=await loadFriends(user.uid);
+          if(savedFriends.length>0)setFriends(savedFriends);
+          const savedDebts=await loadDebts(user.uid);
+          if(savedDebts.length>0)setDebts(savedDebts);
+          const savedSettled=await loadSettled(user.uid);
+          if(savedSettled.length>0)setSettledHistory(savedSettled);
+          const savedGroups=await loadGroups(user.uid);
+          if(savedGroups.length>0)setGroups(savedGroups);
+          const pendingReqs=await loadFriendRequests(user.uid);
+          if(pendingReqs.length>0)setNotifs(prev=>[...pendingReqs.map(r=>({id:r.reqId,type:"friendRequest",from:r.fromUsername,fromUid:r.fromUid,fromFullName:r.fromFullName,msg:`${r.fromUsername} wants to be friends!`,time:"",read:false,req:r})),...prev]);
           setPage("app");
         }else{
           setPage("login");
@@ -2052,7 +2245,12 @@ export default function App(){
 
   const settleDebt=id=>{
     const d=debts.find(x=>x.id===id);
-    if(d)setSettledHistory(prev=>[{...d,settledDate:"Today",id:Date.now()},...prev]);
+    if(d){
+      const settledItem={...d,settledDate:"Today",id:Date.now()};
+      setSettledHistory(prev=>[settledItem,...prev]);
+      if(profile.uid)saveSettled(profile.uid,settledItem);
+      if(profile.uid)deleteDebt(profile.uid,id);
+    }
     setDebts(prev=>prev.filter(x=>x.id!==id));
   };
   const markAllRead=()=>setNotifs(prev=>prev.map(n=>({...n,read:true})));
@@ -2074,13 +2272,23 @@ export default function App(){
     const txns=minimizeDebts(nets.map(n=>({name:n.name,netCents:n.netCents})));
     // Guest players (not on Sharkd) auto-settle — only real friends need approval
     const guestNames=new Set(activePlayers.filter(p=>p.isGuest).map(p=>p.name));
-    const newDebts=txns.filter(t=>!guestNames.has(t.from)&&!guestNames.has(t.to)).map((t,i)=>({id:newId+i+1,from:t.from,to:t.to,amount:Math.round(t.amountCents/100),status:"pending",game:gameName}));
+    const newDebts=txns.filter(t=>!guestNames.has(t.from)&&!guestNames.has(t.to)).map((t,i)=>({id:newId+i+1,from:t.from,to:t.to,amount:t.amountCents/100,status:"pending",game:gameName}));
     const finalGame={...newGame,settled:newDebts.length===0};
     setMyGames(prev=>[finalGame,...prev]);
     // Save to Firebase if user is logged in
     if(profile.uid)saveGame(profile.uid,finalGame);
-    if(newDebts.length)setDebts(prev=>[...prev,...newDebts]);
-    if(selectedGroupId)setGroups(prev=>prev.map(g=>g.id===selectedGroupId?{...g,lastGame:dateStr,games:g.games+1}:g));
+    if(newDebts.length){
+      setDebts(prev=>[...prev,...newDebts]);
+      if(profile.uid)newDebts.forEach(d=>saveDebt(profile.uid,d));
+    }
+    if(selectedGroupId){
+      setGroups(prev=>prev.map(g=>{
+        if(g.id!==selectedGroupId)return g;
+        const updated={...g,lastGame:dateStr,games:g.games+1};
+        if(profile.uid)saveGroup(profile.uid,updated);
+        return updated;
+      }));
+    }
     const newFeedItems=nets.map((n,i)=>({id:newId+1000+i,type:n.netCents>0?"win":"loss",player:n.name==="You"?(profile.username||"You"):n.name,amount:Math.round(n.netCents/100),game:gameName,time:"Just now",avatar:n.name==="You"?(profile.avatarChar||"Y"):n.name[0],color:n.name==="You"?(profile.avatarColor||Gold):friends.find(f=>f.name===n.name)?.color||"#888",isMe:n.name==="You"}));
     setFeedItems(prev=>[...newFeedItems,...prev]);
     setNotifs(prev=>[{id:newId,type:"game",from:"You",msg:`"${gameName}" saved · ${nets.length} players · you ${myNetDollars>=0?"won +":"lost "}$${Math.abs(myNetDollars)}`,time:"Just now",read:false},...prev]);
@@ -2097,7 +2305,11 @@ export default function App(){
     showToast("✓ Game updated!");
   };
 
-  const addChat=(gameId,msg,prof)=>{setChats(prev=>({...prev,[gameId]:[...(prev[gameId]||[]),{id:Date.now(),from:prof.username||"You",msg,time:"Just now",avatar:prof.avatarChar||"Y",color:prof.avatarColor||Gold,isMe:true}]}));};
+  const addChat=(gameId,msg,prof)=>{
+    const newMsg={id:Date.now(),from:prof.username||"You",msg,time:"Just now",avatar:prof.avatarChar||"Y",color:prof.avatarColor||Gold,isMe:true};
+    setChats(prev=>({...prev,[gameId]:[...(prev[gameId]||[]),newMsg]}));
+    if(prof.uid&&selectedFriend?.id)saveChat(prof.uid,selectedFriend.id,newMsg);
+  };;
 
   const myStats=deriveStats(myGames),myScore=calcScore(myStats),myRank=getRank(myScore);
   const unreadCount=notifs.filter(n=>!n.read).length;
@@ -2136,7 +2348,7 @@ export default function App(){
         {screen===S.GROUP_DETAIL  &&<GroupDetailScreen    nav={nav} group={selectedGroup} myGames={myGames} setSelectedGame={setSelectedGame} friends={friends}/>}
         {screen===S.RIVALS        &&<RivalsScreen         nav={nav} friends={friends} myGames={myGames}/>}
         {screen===S.FEED          &&<FeedScreen           nav={nav} feedItems={feedItems}/>}
-        {screen===S.NOTIFICATIONS &&<NotificationsScreen  nav={nav} notifs={notifs} markAllRead={markAllRead}/>}
+        {screen===S.NOTIFICATIONS &&<NotificationsScreen  nav={nav} notifs={notifs} markAllRead={markAllRead} setNotifs={setNotifs} setFriends={setFriends} profile={profile} showToast={showToast}/>}
         {screen===S.SETTINGS      &&<SettingsScreen       nav={nav} profile={profile} setProfile={setProfile} showToast={showToast} onLogout={async()=>{await signOut();setPage("landing");setScreen(S.HOME);setMyGames([]);setDebts([]);setFriends([]);setNotifs([]);setFeedItems([]);setGroups([]);setProfile({username:"",avatarChar:"",avatarColor:Gold,photo:null,isPublic:true,venmo:"",uid:null});}}/>}
       </div>
       {toast&&<div style={{position:"fixed",bottom:32,left:"50%",transform:"translateX(-50%)",background:Gold,color:BG,padding:"12px 28px",borderRadius:24,fontSize:14,fontWeight:"bold",whiteSpace:"nowrap",boxShadow:`0 4px 24px ${Gold}55`,zIndex:500}}>{toast}</div>}
