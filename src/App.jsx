@@ -386,6 +386,99 @@ function StockChart({data,color,width=600,height=200}){
   );
 }
 
+// ─── CHAT SIDEBAR ────────────────────────────────────────────────────────────
+function ChatSidebar({friends,profile,chatOpen,setChatOpen,activeChatFriend,setActiveChatFriend,unreadChats,setUnreadChats,chats,setChats}){
+  const [msgInput,setMsgInput]=useState("");
+  const msgsRef=useRef(null);
+
+  const unreadCount=Object.values(unreadChats).filter(Boolean).length;
+
+  const openFriend=(f)=>{
+    setActiveChatFriend(f);
+    setUnreadChats(prev=>({...prev,[f.id]:false}));
+    if(profile?.uid&&f?.id){
+      loadChat(profile.uid,f.id).then(msgs=>{
+        if(msgs.length>0)setChats(prev=>({...prev,[f.id]:msgs.map(m=>({...m,isMe:m.from===profile.username}))}));
+      });
+    }
+  };
+
+  const sendMsg=()=>{
+    if(!msgInput.trim()||!activeChatFriend)return;
+    const msg={id:Date.now(),from:profile.username||"You",msg:msgInput.trim(),time:"Just now",isMe:true,color:Gold};
+    setChats(prev=>({...prev,[activeChatFriend.id]:[...(prev[activeChatFriend.id]||[]),msg]}));
+    if(profile?.uid&&activeChatFriend?.id)saveChat(profile.uid,activeChatFriend.id,msg);
+    setMsgInput("");
+    setTimeout(()=>{if(msgsRef.current)msgsRef.current.scrollTop=msgsRef.current.scrollHeight;},50);
+  };
+
+  useEffect(()=>{
+    if(msgsRef.current)msgsRef.current.scrollTop=msgsRef.current.scrollHeight;
+  },[chats,activeChatFriend]);
+
+  if(!chatOpen)return null;
+  const msgs=activeChatFriend?chats[activeChatFriend.id]||[]:[];
+
+  return(
+    <div style={{position:"fixed",right:0,top:0,bottom:0,width:300,background:Sidebar,borderLeft:`1px solid ${Border}`,display:"flex",flexDirection:"column",zIndex:150,boxShadow:"-4px 0 20px rgba(0,0,0,.4)"}}>
+      {/* Header */}
+      {!activeChatFriend?(
+        <>
+          <div style={{padding:"18px 18px",borderBottom:`1px solid ${Border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <span style={{color:"#fff",fontWeight:"bold",fontSize:16}}>💬 Chats</span>
+            <div onClick={()=>setChatOpen(false)} style={{color:"#555",fontSize:22,cursor:"pointer",lineHeight:1}}>×</div>
+          </div>
+          <div style={{flex:1,overflowY:"auto"}}>
+            {friends.length===0?(
+              <div style={{textAlign:"center",padding:"48px 20px",color:"#555",fontSize:13}}>Add friends to start chatting!</div>
+            ):friends.map(f=>{
+              const lastMsg=(chats[f.id]||[]).slice(-1)[0];
+              const hasUnread=unreadChats[f.id];
+              return(
+                <div key={f.id} onClick={()=>openFriend(f)} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 18px",cursor:"pointer",borderBottom:`1px solid ${Border}`,background:hasUnread?`${Gold}08`:"transparent"}}>
+                  <div style={{position:"relative",flexShrink:0}}>
+                    <div style={{width:40,height:40,borderRadius:"50%",background:`${f.color}22`,border:`2px solid ${f.color}44`,display:"flex",alignItems:"center",justifyContent:"center",color:f.color,fontWeight:"bold",fontSize:16}}>{f.avatar}</div>
+                    {hasUnread&&<div style={{position:"absolute",top:-2,right:-2,width:10,height:10,borderRadius:"50%",background:Gold,border:`2px solid ${Sidebar}`}}/>}
+                  </div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{color:hasUnread?"#fff":"#888",fontWeight:hasUnread?"bold":"normal",fontSize:13}}>{f.name}</div>
+                    <div style={{color:"#444",fontSize:11,marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{lastMsg?lastMsg.msg:"Start a conversation"}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      ):(
+        <>
+          <div style={{padding:"14px 18px",borderBottom:`1px solid ${Border}`,display:"flex",alignItems:"center",gap:12}}>
+            <div onClick={()=>setActiveChatFriend(null)} style={{color:"#555",fontSize:20,cursor:"pointer",lineHeight:1}}>←</div>
+            <div style={{width:32,height:32,borderRadius:"50%",background:`${activeChatFriend.color}22`,border:`2px solid ${activeChatFriend.color}44`,display:"flex",alignItems:"center",justifyContent:"center",color:activeChatFriend.color,fontWeight:"bold",fontSize:14,flexShrink:0}}>{activeChatFriend.avatar}</div>
+            <span style={{color:"#fff",fontWeight:"bold",fontSize:14,flex:1}}>{activeChatFriend.name}</span>
+            <div onClick={()=>setChatOpen(false)} style={{color:"#555",fontSize:22,cursor:"pointer",lineHeight:1}}>×</div>
+          </div>
+          <div ref={msgsRef} style={{flex:1,overflowY:"auto",padding:"16px",display:"flex",flexDirection:"column",gap:10}}>
+            {msgs.length===0&&<div style={{textAlign:"center",color:"#444",fontSize:13,marginTop:40}}>Say hi to {activeChatFriend.name}!</div>}
+            {msgs.map((m,i)=>(
+              <div key={i} style={{display:"flex",justifyContent:m.isMe?"flex-end":"flex-start"}}>
+                <div style={{maxWidth:"80%"}}>
+                  {!m.isMe&&<div style={{color:activeChatFriend.color,fontSize:11,marginBottom:3,fontWeight:"bold"}}>{m.from}</div>}
+                  <div style={{background:m.isMe?`${Gold}22`:Border,border:`1px solid ${m.isMe?Gold:Border}`,borderRadius:m.isMe?"14px 14px 4px 14px":"14px 14px 14px 4px",padding:"9px 14px",color:"#fff",fontSize:13,lineHeight:1.5}}>{m.msg}</div>
+                  <div style={{color:"#333",fontSize:10,marginTop:3,textAlign:m.isMe?"right":"left"}}>{m.time}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{padding:"12px 16px",borderTop:`1px solid ${Border}`,display:"flex",gap:8}}>
+            <input value={msgInput} onChange={e=>setMsgInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&sendMsg()} placeholder={`Message ${activeChatFriend.name}...`} style={{flex:1,background:BG,border:`1px solid ${Border}`,borderRadius:20,padding:"9px 16px",color:"#fff",fontSize:13,outline:"none"}}/>
+            <div onClick={sendMsg} style={{background:`${Gold}22`,border:`1px solid ${Gold}44`,borderRadius:"50%",width:36,height:36,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",color:Gold,fontSize:16,flexShrink:0}}>→</div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── SIDEBAR ─────────────────────────────────────────────────────────────────
 function useIsMobile(){
   const [mobile,setMobile]=useState(false);
@@ -398,7 +491,7 @@ function useIsMobile(){
   return mobile;
 }
 
-function SidebarNav({screen,nav,profile,debts,notifs,myGames,mobileOpen,setMobileOpen}){
+function SidebarNav({screen,nav,profile,debts,notifs,myGames,mobileOpen,setMobileOpen,onChatToggle,chatOpen,unreadChats,props={}}){
   const unread=notifs.filter(n=>!n.read).length;
   const pending=debts.filter(d=>d.from==="You"||d.to==="You").length;
   const myStats=deriveStats(myGames),myScore=calcScore(myStats),myRank=getRank(myScore);
@@ -417,9 +510,10 @@ function SidebarNav({screen,nav,profile,debts,notifs,myGames,mobileOpen,setMobil
     {s:S.GROUPS,      icon:"🎯",label:"Groups"},
     {s:S.RIVALS,      icon:"⚔️",label:"Rivals"},
     {s:S.FEED,        icon:"📡",label:"Feed"},
+    {s:"chat",         icon:"💬",label:"Chats",isChat:true},
   ];
 
-  const doNav=s=>{nav(s);if(isMobile)setMobileOpen(false);};
+  const doNav=(s,item)=>{if(item?.isChat){if(props.onChatToggle)props.onChatToggle();if(isMobile)setMobileOpen(false);return;}nav(s);if(isMobile)setMobileOpen(false);};
 
   const sidebarContent=(
     <div style={{width:240,background:Sidebar,borderRight:`1px solid ${Border}`,display:"flex",flexDirection:"column",height:"100vh"}}>
@@ -438,12 +532,15 @@ function SidebarNav({screen,nav,profile,debts,notifs,myGames,mobileOpen,setMobil
       {/* Nav items */}
       <div style={{flex:1,overflowY:"auto",padding:"10px 0"}}>
         {navItems.map(item=>{
-          const active=screen===item.s;
+          const isChat=item.isChat;
+          const active=isChat?chatOpen:screen===item.s;
+          const unreadCount=isChat?Object.values(unreadChats||{}).filter(Boolean).length:0;
           return(
-            <div key={item.s} onClick={()=>doNav(item.s)} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 20px",cursor:"pointer",background:active?`${Gold}15`:"transparent",borderLeft:active?`3px solid ${Gold}`:"3px solid transparent",transition:"all .15s"}}>
+            <div key={item.s||item.label} onClick={()=>isChat?(onChatToggle&&onChatToggle()):doNav(item.s,item)} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 20px",cursor:"pointer",background:active?`${Gold}15`:"transparent",borderLeft:active?`3px solid ${Gold}`:"3px solid transparent",transition:"all .15s"}}>
               <span style={{fontSize:17,opacity:active?1:0.45}}>{item.icon}</span>
               <span style={{color:active?Gold:"#666",fontWeight:active?"bold":"normal",fontSize:14}}>{item.label}</span>
               {item.badge>0&&<div style={{marginLeft:"auto",background:Down,borderRadius:"50%",width:18,height:18,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:"bold",color:"#fff"}}>{item.badge}</div>}
+              {isChat&&unreadCount>0&&<div style={{marginLeft:"auto",background:Gold,borderRadius:"50%",width:18,height:18,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:"bold",color:BG}}>{unreadCount}</div>}
             </div>
           );
         })}
@@ -1533,7 +1630,106 @@ function StatsScreen({profile,nav,myGames,myStats,myScore,myRank}){
 }
 
 // ─── RANK SCREEN ─────────────────────────────────────────────────────────────
-function RankScreen({nav,profile,myStats,myScore,myRank}){
+function AnimatedRankCard({profile,myScore,myRank,myStats,nextRank,toNext,pct,myGames}){
+  const allTime=myGames.reduce((s,g)=>s+g.net,0);
+  const wins=myGames.filter(g=>g.net>0).length;
+  const winRate=myGames.length?Math.round(wins/myGames.length*100):0;
+  const circumference=364.4;
+  const scorePct=myScore/10;
+  const offset=circumference-(circumference*scorePct);
+  const ringId="rankRing_"+Math.random().toString(36).slice(2);
+  const numId="rankNum_"+Math.random().toString(36).slice(2);
+  const barId="rankBar_"+Math.random().toString(36).slice(2);
+
+  useEffect(()=>{
+    const ring=document.getElementById(ringId);
+    const num=document.getElementById(numId);
+    const bar=document.getElementById(barId);
+    if(ring){
+      ring.style.strokeDashoffset=circumference;
+      ring.style.transition="none";
+      setTimeout(()=>{
+        ring.style.transition="stroke-dashoffset 1.6s cubic-bezier(0.4,0,0.2,1)";
+        ring.style.strokeDashoffset=offset;
+      },100);
+    }
+    if(bar){
+      bar.style.width="0%";
+      setTimeout(()=>{bar.style.width=`${pct}%`;},100);
+    }
+    if(num){
+      let start=0,end=myScore,duration=1400;
+      const startTime=performance.now();
+      const tick=(now)=>{
+        const elapsed=now-startTime,progress=Math.min(elapsed/duration,1);
+        const eased=1-Math.pow(1-progress,3);
+        num.textContent=(start+(end-start)*eased).toFixed(1);
+        if(progress<1)requestAnimationFrame(tick);
+        else num.textContent=end.toFixed(1);
+      };
+      setTimeout(()=>requestAnimationFrame(tick),200);
+    }
+  },[myScore]);
+
+  return(
+    <div style={{background:"linear-gradient(135deg,#0d0d1e,#13132a)",border:`1px solid ${myRank.color}44`,borderRadius:24,padding:"36px",position:"relative",overflow:"hidden"}}>
+      <div style={{position:"absolute",top:-60,right:-60,width:240,height:240,borderRadius:"50%",background:`${myRank.color}08`,border:`1px solid ${myRank.color}12`}}/>
+      
+      {/* Top row */}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:28}}>
+        <div>
+          <div style={{color:myRank.color,fontSize:11,letterSpacing:3,fontFamily:"monospace",marginBottom:10}}>PLAYER RANK · SHARKD</div>
+          <div style={{color:"#fff",fontSize:26,fontWeight:"bold",marginBottom:14}}>{profile.username}</div>
+          <div style={{background:`${myRank.color}22`,border:`1px solid ${myRank.color}55`,borderRadius:12,padding:"8px 20px",color:myRank.color,fontWeight:"bold",fontSize:17,display:"inline-block"}}>{myRank.emoji} {myRank.tier}</div>
+        </div>
+        {/* Animated ring */}
+        <div style={{position:"relative",width:140,height:140,flexShrink:0}}>
+          <svg width="140" height="140" style={{transform:"rotate(-90deg)"}}>
+            <circle cx="70" cy="70" r="58" fill="none" stroke="#1a1a2e" strokeWidth="10"/>
+            <circle id={ringId} cx="70" cy="70" r="58" fill="none" stroke={myRank.color} strokeWidth="10"
+              strokeDasharray={circumference} strokeDashoffset={circumference} strokeLinecap="round"/>
+          </svg>
+          <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
+            <div id={numId} style={{color:myRank.color,fontSize:36,fontWeight:"bold",fontFamily:"monospace",lineHeight:1}}>0.0</div>
+            <div style={{color:"#555",fontSize:12}}>out of 10</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Quote */}
+      <div style={{background:`${myRank.color}0e`,borderLeft:`3px solid ${myRank.color}44`,borderRadius:"0 10px 10px 0",padding:"14px 18px",color:"#888",fontSize:14,lineHeight:1.6,marginBottom:24,fontStyle:"italic"}}>"{myRank.desc}"</div>
+
+      {/* Stats row */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:24}}>
+        {[{label:"WIN RATE",val:`${winRate}%`,col:winRate>=50?Up:Down},{label:"ALL-TIME",val:`${allTime>=0?"+":""}$${allTime}`,col:allTime>=0?Up:Down},{label:"GAMES",val:myGames.length,col:"#fff"}].map(s=>(
+          <div key={s.label} style={{background:`${s.col}0a`,border:`1px solid ${s.col}22`,borderRadius:12,padding:14,textAlign:"center"}}>
+            <div style={{color:s.col,fontSize:22,fontWeight:"bold",fontFamily:"monospace"}}>{s.val}</div>
+            <div style={{color:"#555",fontSize:11,marginTop:4,fontFamily:"monospace"}}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Progress to next rank */}
+      {nextRank?(
+        <div style={{background:"#0d0d1e",border:"1px solid #1c1c2e",borderRadius:12,padding:16}}>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:10}}>
+            <div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:16}}>{myRank.emoji}</span><span style={{color:myRank.color,fontSize:13,fontWeight:"bold"}}>{myRank.tier}</span></div>
+            <div style={{display:"flex",alignItems:"center",gap:8}}><span style={{color:RANKS[RANKS.findIndex(r=>r.tier===nextRank.tier)].color,fontSize:13,fontWeight:"bold"}}>{nextRank.tier}</span><span style={{fontSize:16}}>{nextRank.emoji}</span></div>
+          </div>
+          <div style={{height:8,background:"#1a1a2e",borderRadius:4,overflow:"hidden",marginBottom:8}}>
+            <div id={barId} style={{height:"100%",width:"0%",background:`linear-gradient(90deg,${myRank.color}88,${myRank.color})`,borderRadius:4,transition:"width 1.6s cubic-bezier(0.4,0,0.2,1) 0.3s"}}/>
+          </div>
+          <div style={{display:"flex",justifyContent:"space-between"}}>
+            <span style={{color:"#555",fontSize:12,fontFamily:"monospace"}}>{myScore.toFixed(1)} / 10</span>
+            <span style={{color:myRank.color,fontSize:12,fontFamily:"monospace"}}>{toNext.toFixed(2)} pts to next rank</span>
+          </div>
+        </div>
+      ):<div style={{background:`${Gold}18`,border:`1px solid ${Gold}44`,borderRadius:10,padding:12,color:Gold,fontWeight:"bold",fontSize:14,textAlign:"center"}}>🦈 Maximum rank achieved. You are the apex predator.</div>}
+    </div>
+  );
+}
+
+function RankScreen({nav,profile,myStats,myScore,myRank,myGames}){
   const isMobile=useIsMobile();  const [tab,setTab]=useState("card");
   const nextIdx=RANKS.findIndex(r=>r.tier===myRank.tier)+1,nextRank=RANKS[nextIdx]||null;
   const toNext=nextRank?nextRank.min-myScore:0,pct=nextRank?((myScore-myRank.min)/(myRank.max-myRank.min))*100:100;
@@ -1547,59 +1743,73 @@ function RankScreen({nav,profile,myStats,myScore,myRank}){
       </div>
       <div style={{maxWidth:700}}>
         {tab==="card"&&(
-          <div style={{background:`linear-gradient(135deg,#0d0d1e,#13132a)`,border:`1px solid ${myRank.color}44`,borderRadius:24,padding:"40px",position:"relative",overflow:"hidden"}}>
-            <div style={{position:"absolute",right:-20,bottom:-30,fontSize:200,opacity:.03,color:myRank.color}}>♠</div>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:24}}>
-              <div>
-                <div style={{color:myRank.color,fontSize:11,letterSpacing:3,fontFamily:"monospace",marginBottom:8}}>PLAYER RANK · SHARKD</div>
-                <div style={{color:"#fff",fontSize:28,fontWeight:"bold",marginBottom:12}}>{profile.username}</div>
-                <div style={{display:"flex",alignItems:"center",gap:10}}>
-                  <div style={{background:`${myRank.color}22`,border:`1px solid ${myRank.color}55`,borderRadius:12,padding:"8px 20px",color:myRank.color,fontWeight:"bold",fontSize:18}}>{myRank.emoji} {myRank.tier}</div>
-                </div>
-              </div>
-              <div style={{textAlign:"right"}}>
-                <div style={{color:myRank.color,fontSize:72,fontWeight:"bold",fontFamily:"monospace",textShadow:`0 0 40px ${myRank.color}88`,lineHeight:1}}>{myScore.toFixed(1)}</div>
-                <div style={{color:"#555",fontSize:14}}>out of 10</div>
-              </div>
-            </div>
-            <div style={{background:`${myRank.color}0e`,border:`1px solid ${myRank.color}1a`,borderRadius:12,padding:"14px 18px",color:"#888",fontSize:14,lineHeight:1.6,marginBottom:20,fontStyle:"italic"}}>"{myRank.desc}"</div>
-            {nextRank?<div>
-              <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}><span style={{color:"#555",fontSize:13}}>Progress to {nextRank.emoji} {nextRank.tier}</span><span style={{color:myRank.color,fontSize:13,fontFamily:"monospace"}}>{toNext.toFixed(2)} pts away</span></div>
-              <div style={{height:6,background:"#1a1a2e",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${pct}%`,background:`linear-gradient(90deg,${myRank.color}77,${myRank.color})`,borderRadius:3}}/></div>
-            </div>:<div style={{background:`${Gold}18`,border:`1px solid ${Gold}44`,borderRadius:10,padding:"12px",color:Gold,fontWeight:"bold",fontSize:14,textAlign:"center"}}>🦈 Maximum rank achieved. You are the apex predator.</div>}
-          </div>
+          <AnimatedRankCard profile={profile} myScore={myScore} myRank={myRank} myStats={myStats} nextRank={nextRank} toNext={toNext} pct={pct} myGames={myGames||[]}/>
         )}
         {tab==="metrics"&&(
           <Card2>
             <SectionLabel text={`Metrics — ${myStats.gamesPlayed} games played`}/>
             {METRICS.map((m,i)=>{
               const val=myStats[m.key]||0;
+              const barId=`mbar_${m.key}`;
               return(
-                <div key={m.key} style={{marginBottom:16}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                <div key={m.key} style={{marginBottom:16,opacity:0,transform:"translateX(-16px)",animation:`slideIn 0.4s ease ${i*0.1}s forwards`}}>
+                  <style>{`@keyframes slideIn{to{opacity:1;transform:translateX(0)}}`}</style>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                     <div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:16}}>{m.icon}</span><span style={{color:"#fff",fontSize:14,fontWeight:"bold"}}>{m.label}</span><span style={{color:"#555",fontSize:12}}>({(m.weight*100).toFixed(0)}%)</span></div>
                     <span style={{color:myRank.color,fontWeight:"bold",fontSize:14,fontFamily:"monospace"}}>{m.fmt(val)}</span>
                   </div>
-                  <div style={{height:6,background:"#1a1a2e",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${val*10}%`,background:`linear-gradient(90deg,${myRank.color}77,${myRank.color})`,borderRadius:3}}/></div>
+                  <div style={{height:6,background:"#1a1a2e",borderRadius:3,overflow:"hidden"}}>
+                    <div id={barId} style={{height:"100%",width:"0%",background:`linear-gradient(90deg,${myRank.color}77,${myRank.color})`,borderRadius:3,transition:`width 0.8s cubic-bezier(0.4,0,0.2,1) ${i*0.1+0.2}s`}}/>
+                  </div>
+                  <script dangerouslySetInnerHTML={{__html:`setTimeout(()=>{const b=document.getElementById('${barId}');if(b)b.style.width='${val*10}%';},${i*100+100})`}}/>
                 </div>
               );
             })}
           </Card2>
         )}
         {tab==="ladder"&&(
-          <Card2>
-            {[...RANKS].reverse().map(r=>{
-              const isCur=r.tier===myRank.tier,isAbove=r.min>myScore,pct2=isCur?((myScore-r.min)/(r.max-r.min))*100:0;
+          <Card2 style={{padding:0,overflow:"hidden"}}>
+            {[...RANKS].reverse().map((r,i)=>{
+              const isCur=r.tier===myRank.tier;
+              const isBelow=r.max<=myScore&&!isCur;
+              const isAbove=r.min>=myScore&&!isCur;
+              const pct2=isCur?((myScore-r.min)/(r.max-r.min))*100:0;
+              const barId=`lbar_${r.tier.replace(/\s/g,"")}`;
+              const showDivider=(i>0&&([...RANKS].reverse()[i-1].max<=myScore||[...RANKS].reverse()[i-1].tier===myRank.tier))&&(isCur||isBelow);
               return(
-                <div key={r.tier} style={{display:"flex",alignItems:"center",gap:14,padding:"14px 0",borderBottom:`1px solid ${Border}`,opacity:isAbove?.3:1}}>
-                  <div style={{width:44,height:44,borderRadius:"50%",background:isCur?`${r.color}22`:"#0f0f1d",border:`2px solid ${isCur?r.color:"#2a2a3a"}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,boxShadow:isCur?`0 0 16px ${r.color}55`:"none"}}>{r.emoji}</div>
-                  <div style={{flex:1}}>
-                    <div style={{display:"flex",alignItems:"center",gap:8}}><span style={{color:isCur?r.color:"#aaa",fontWeight:"bold",fontSize:15}}>{r.tier}</span>{isCur&&<span style={{background:`${r.color}22`,border:`1px solid ${r.color}44`,borderRadius:6,padding:"2px 8px",fontSize:10,color:r.color,letterSpacing:1,fontFamily:"monospace"}}>YOU</span>}</div>
-                    <div style={{color:"#333",fontSize:11,fontFamily:"monospace",marginTop:2}}>{r.min.toFixed(1)} – {r.max.toFixed(1)}</div>
-                  </div>
-                  <div style={{width:80,height:4,background:"#1a1a2e",borderRadius:2,overflow:"hidden"}}>
-                    {isCur&&<div style={{height:"100%",width:`${pct2}%`,background:r.color,borderRadius:2}}/>}
-                    {!isAbove&&!isCur&&<div style={{height:"100%",width:"100%",background:`${r.color}44`,borderRadius:2}}/>}
+                <div key={r.tier}>
+                  {showDivider&&<div style={{height:1,background:Border,margin:"4px 0"}}/>}
+                  <div style={{display:"flex",alignItems:"center",gap:14,padding:"14px 20px",
+                    background:isCur?`${r.color}08`:isBelow?"#00e09604":"transparent",
+                    borderLeft:isCur?`3px solid ${r.color}`:isBelow?"3px solid #00e09644":"3px solid transparent",
+                    opacity:isAbove?0.3:1,
+                    animation:`fadeUp 0.35s ease ${i*0.07}s both`,
+                  }}>
+                    <style>{`@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}`}</style>
+                    <div style={{position:"relative",width:48,height:48,flexShrink:0}}>
+                      <div style={{width:48,height:48,borderRadius:"50%",
+                        background:isCur?`${r.color}22`:isBelow?"#00e09612":"#1a1a2e",
+                        border:`2px solid ${isCur?r.color:isBelow?"#00e09644":"#2a2a3a"}`,
+                        display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,
+                        filter:isAbove?"grayscale(1)":"none",
+                      }}>{r.emoji}</div>
+                      {isBelow&&<div style={{position:"absolute",bottom:-2,right:-2,width:18,height:18,borderRadius:"50%",background:Up,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:BG,fontWeight:"bold"}}>✓</div>}
+                    </div>
+                    <div style={{flex:1}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                        <span style={{color:isCur?r.color:isBelow?Up:isAbove?"#333":"#aaa",fontWeight:"bold",fontSize:15}}>{r.tier}</span>
+                        {isCur&&<span style={{background:`${r.color}22`,border:`1px solid ${r.color}44`,borderRadius:6,padding:"2px 8px",fontSize:10,color:r.color,letterSpacing:1,fontFamily:"monospace"}}>YOU</span>}
+                        {isBelow&&<span style={{color:Up,fontSize:11,fontFamily:"monospace"}}>completed</span>}
+                      </div>
+                      <div style={{color:isAbove?"#222":"#444",fontSize:11,fontFamily:"monospace",marginTop:2}}>{r.min.toFixed(1)} — {r.max.toFixed(1)}</div>
+                    </div>
+                    <div style={{width:100,height:5,background:"#1a1a2e",borderRadius:3,overflow:"hidden"}}>
+                      <div id={barId} style={{height:"100%",width:"0%",borderRadius:3,
+                        background:isCur?r.color:isBelow?Up:"transparent",
+                        transition:`width 1s cubic-bezier(0.4,0,0.2,1) ${i*0.07+0.3}s`
+                      }}/>
+                    </div>
+                    <script dangerouslySetInnerHTML={{__html:`setTimeout(()=>{const b=document.getElementById('${barId}');if(b)b.style.width='${isCur?pct2:isBelow?100:0}%';},${i*70+200})`}}/>
                   </div>
                 </div>
               );
@@ -1613,21 +1823,40 @@ function RankScreen({nav,profile,myStats,myScore,myRank}){
 
 // ─── FRIENDS ─────────────────────────────────────────────────────────────────
 function FriendsScreen({nav,profile,friends,setFriends,setSelectedFriend}){
-  const isMobile=useIsMobile();  const [search,setSearch]=useState(""),[confirmRemove,setConfirmRemove]=useState(null);
-  const filtered=friends.filter(f=>f.name.toLowerCase().includes(search.toLowerCase())||f.username.toLowerCase().includes(search.toLowerCase()));
+  const isMobile=useIsMobile();
+  const [search,setSearch]=useState(""),[confirmRemove,setConfirmRemove]=useState(null);
+  const filtered=friends.filter(f=>
+    f.name.toLowerCase().includes(search.toLowerCase())||
+    f.username.toLowerCase().includes(search.toLowerCase())
+  );
+  const doRemove=async(id)=>{
+    setFriends(prev=>prev.filter(f=>f.id!==id));
+    if(profile?.uid)await removeFriend(profile.uid,id);
+    setConfirmRemove(null);
+  };
   return(
     <MainContent isMobile={isMobile}>
-      <PageHeader title="Friends" subtitle={`${friends.length} friends`}
+      <PageHeader title="Friends" subtitle={`${friends.length} friend${friends.length!==1?"s":""}`}
         action={<div style={{display:"flex",gap:12}}>
-          <div onClick={()=>nav(S.RIVALS)} style={{padding:"10px 20px",borderRadius:10,background:`#a78bfa22`,border:`1px solid #a78bfa44`,color:"#a78bfa",fontWeight:"bold",fontSize:13,cursor:"pointer"}}>⚔️ Rivals</div>
+          <div onClick={()=>nav(S.RIVALS)} style={{padding:"10px 20px",borderRadius:10,background:"#a78bfa22",border:"1px solid #a78bfa44",color:"#a78bfa",fontWeight:"bold",fontSize:13,cursor:"pointer"}}>⚔️ Rivals</div>
           <Btn label="+ Add Friends" onClick={()=>nav(S.ADD_FRIENDS)}/>
         </div>}
       />
-      <div style={{marginBottom:20,maxWidth:400}}>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search by name or @username..." style={{width:"100%",background:Card,border:`1px solid ${Border}`,borderRadius:10,padding:"11px 16px",color:"#fff",fontSize:14,outline:"none",boxSizing:"border-box"}}/>
-      </div>
-      {filtered.length===0?<Card2 style={{textAlign:"center",padding:"48px"}}><div style={{fontSize:48,marginBottom:12}}>👥</div><div style={{color:"#555",fontSize:14}}>No friends yet. Add some!</div><div style={{marginTop:16}}><Btn label="+ Add Friends" onClick={()=>nav(S.ADD_FRIENDS)}/></div></Card2>:(
-        <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:12}}>
+      {friends.length>0&&(
+        <div style={{marginBottom:20,maxWidth:400}}>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search friends..." style={{width:"100%",background:Card,border:`1px solid ${Border}`,borderRadius:10,padding:"11px 16px",color:"#fff",fontSize:14,outline:"none",boxSizing:"border-box"}}/>
+        </div>
+      )}
+      {friends.length===0?(
+        <Card2 style={{textAlign:"center",padding:"48px"}}>
+          <div style={{fontSize:48,marginBottom:12}}>👥</div>
+          <div style={{color:"#555",fontSize:14,marginBottom:16}}>No friends yet. Search for players by their Sharkd username!</div>
+          <Btn label="+ Add Friends" onClick={()=>nav(S.ADD_FRIENDS)}/>
+        </Card2>
+      ):filtered.length===0?(
+        <Card2 style={{textAlign:"center",padding:"32px"}}><div style={{color:"#555",fontSize:14}}>No friends match "{search}"</div></Card2>
+      ):(
+        <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(2,1fr)",gap:12}}>
           {filtered.map(f=>(
             <div key={f.id} style={{background:Card,border:`1px solid ${Border}`,borderRadius:14,padding:"16px 20px",display:"flex",alignItems:"center",gap:12}}>
               <div onClick={()=>{setSelectedFriend(f);nav(S.FRIEND_PROFILE);}} style={{display:"flex",alignItems:"center",gap:12,flex:1,cursor:"pointer"}}>
@@ -1651,10 +1880,10 @@ function FriendsScreen({nav,profile,friends,setFriends,setSelectedFriend}){
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.7)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:300}}>
           <div style={{background:"#13131f",border:`1px solid ${Border}`,borderRadius:20,padding:"32px",width:380}}>
             <div style={{color:"#fff",fontWeight:"bold",fontSize:18,marginBottom:8}}>Remove {friends.find(x=>x.id===confirmRemove)?.name}?</div>
-            <div style={{color:"#555",fontSize:14,marginBottom:24}}>They'll be removed from your friends list.</div>
+            <div style={{color:"#555",fontSize:14,marginBottom:24}}>They'll be removed from your friends list permanently.</div>
             <div style={{display:"flex",gap:12}}>
               <Btn label="Cancel" onClick={()=>setConfirmRemove(null)} outline/>
-              <div onClick={()=>{setFriends(prev=>prev.filter(f=>f.id!==confirmRemove));setConfirmRemove(null);}} style={{flex:1,background:`${Down}22`,border:`1px solid ${Down}44`,borderRadius:12,padding:"12px",textAlign:"center",color:Down,fontWeight:"bold",cursor:"pointer",fontSize:14}}>Remove</div>
+              <div onClick={()=>doRemove(confirmRemove)} style={{flex:1,background:`${Down}22`,border:`1px solid ${Down}44`,borderRadius:12,padding:"12px",textAlign:"center",color:Down,fontWeight:"bold",cursor:"pointer",fontSize:14}}>Remove</div>
             </div>
           </div>
         </div>
@@ -1884,9 +2113,21 @@ function AddFriendsScreen({nav,showToast,friends,setFriends,profile}){
   };
 
   const addFriend=async(u)=>{
-    await sendFriendRequest(profile.uid,profile.username,profile.fullName||profile.username,u.id);
-    setSent(s=>({...s,[u.id]:true}));
-    showToast(`✓ Friend request sent to @${u.username}!`);
+    if(sent[u.id]){
+      // Unsend
+      try{
+        const app=getFirebase();if(!app)return;
+        const db=window.firebase_firestore.getFirestore(app);
+        const reqId=profile.uid+"_"+u.id;
+        await window.firebase_firestore.deleteDoc(window.firebase_firestore.doc(db,"users",u.id,"friendRequests",reqId));
+      }catch(e){console.error(e);}
+      setSent(s=>({...s,[u.id]:false}));
+      showToast(`Request to @${u.username} unsent.`);
+    }else{
+      await sendFriendRequest(profile.uid,profile.username,profile.fullName||profile.username,u.id);
+      setSent(s=>({...s,[u.id]:true}));
+      showToast(`✓ Friend request sent to @${u.username}!`);
+    }
   };
 
   return(
@@ -1909,9 +2150,7 @@ function AddFriendsScreen({nav,showToast,friends,setFriends,profile}){
               </div>
               {alreadyFriend?
                 <div style={{color:"#555",fontSize:13,fontFamily:"monospace"}}>Already friends</div>:
-                sent[u.id]?
-                <div style={{color:Up,fontSize:13,fontFamily:"monospace"}}>✓ Request Sent</div>:
-                <div onClick={()=>addFriend(u)} style={{background:`${Gold}22`,border:`1px solid ${Gold}44`,borderRadius:10,padding:"9px 18px",color:Gold,fontSize:13,fontWeight:"bold",cursor:"pointer"}}>Send Request</div>
+                <div onClick={()=>addFriend(u)} style={{background:sent[u.id]?`${Down}18`:`${Gold}22`,border:`1px solid ${sent[u.id]?`${Down}44`:`${Gold}44`}`,borderRadius:10,padding:"9px 18px",color:sent[u.id]?Down:Gold,fontSize:13,fontWeight:"bold",cursor:"pointer"}}>{sent[u.id]?"Unsend":"Send Request"}</div>
               }
             </div>
           );
@@ -2240,6 +2479,16 @@ export default function App(){
     return()=>unsub();
   },[]);
 
+  const [chatOpen,setChatOpen]=useState(false);
+  const [activeChatFriend,setActiveChatFriend]=useState(null);
+  const [unreadChats,setUnreadChats]=useState({});
+
+  const openChatWith=(friend)=>{
+    setActiveChatFriend(friend);
+    setChatOpen(true);
+    setUnreadChats(prev=>({...prev,[friend.id]:false}));
+  };
+
   const nav=s=>{setPrevScreen(screen);setScreen(s);};
   const showToast=msg=>{setToast(msg);setTimeout(()=>setToast(null),2600);};
 
@@ -2329,7 +2578,7 @@ export default function App(){
 
   return(
     <div style={{fontFamily:"'Georgia','Times New Roman',serif",background:BG,minHeight:"100vh",display:"flex"}}>
-      <SidebarNav screen={screen} nav={nav} profile={profile} debts={debts} notifs={notifs} myGames={myGames} mobileOpen={mobileOpen} setMobileOpen={setMobileOpen}/>
+      <SidebarNav screen={screen} nav={nav} profile={profile} debts={debts} notifs={notifs} myGames={myGames} mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} onChatToggle={()=>setChatOpen(o=>!o)} chatOpen={chatOpen} unreadChats={unreadChats}/>
       <div style={{flex:1,overflowY:"auto"}}>
         {screen===S.HOME          &&<HomeScreen          nav={nav} profile={profile} debts={debts} notifs={notifs} myGames={myGames} setSelectedDebt={setSelectedDebt}/>}
         {screen===S.NEW_GAME      &&<NewGameScreen        nav={nav} profile={profile} friends={friends} groups={groups} addGame={addGame} showToast={showToast}/>}
@@ -2339,7 +2588,7 @@ export default function App(){
         {screen===S.GAME_DETAIL   &&<GameDetailScreen     nav={nav} game={selectedGame} chats={chats} addChat={addChat} profile={profile} onEdit={()=>{setScreen(S.EDIT_GAME);}}/>}
         {screen===S.EDIT_GAME     &&<EditGameScreen       nav={nav} game={selectedGame} editGame={editGame} profile={profile}/>}
         {screen===S.STATS         &&<StatsScreen          nav={nav} profile={profile} myGames={myGames} myStats={myStats} myScore={myScore} myRank={myRank}/>}
-        {screen===S.RANK          &&<RankScreen           nav={nav} profile={profile} myStats={myStats} myScore={myScore} myRank={myRank}/>}
+        {screen===S.RANK          &&<RankScreen           nav={nav} profile={profile} myStats={myStats} myScore={myScore} myRank={myRank} myGames={myGames}/>}
         {screen===S.FRIENDS       &&<FriendsScreen        nav={nav} profile={profile} friends={friends} setFriends={setFriends} setSelectedFriend={setSelectedFriend}/>}
         {screen===S.FRIEND_PROFILE&&<FriendProfileScreen  nav={nav} friend={selectedFriend} fromScreen={prevScreen} profile={profile}/>}
         {screen===S.ADD_FRIENDS   &&<AddFriendsScreen     nav={nav} showToast={showToast} friends={friends} setFriends={setFriends} profile={profile}/>}
@@ -2351,6 +2600,7 @@ export default function App(){
         {screen===S.NOTIFICATIONS &&<NotificationsScreen  nav={nav} notifs={notifs} markAllRead={markAllRead} setNotifs={setNotifs} setFriends={setFriends} profile={profile} showToast={showToast}/>}
         {screen===S.SETTINGS      &&<SettingsScreen       nav={nav} profile={profile} setProfile={setProfile} showToast={showToast} onLogout={async()=>{await signOut();setPage("landing");setScreen(S.HOME);setMyGames([]);setDebts([]);setFriends([]);setNotifs([]);setFeedItems([]);setGroups([]);setProfile({username:"",avatarChar:"",avatarColor:Gold,photo:null,isPublic:true,venmo:"",uid:null});}}/>}
       </div>
+      <ChatSidebar friends={friends} profile={profile} chatOpen={chatOpen} setChatOpen={setChatOpen} activeChatFriend={activeChatFriend} setActiveChatFriend={setActiveChatFriend} unreadChats={unreadChats} setUnreadChats={setUnreadChats} chats={chats} setChats={setChats}/>
       {toast&&<div style={{position:"fixed",bottom:32,left:"50%",transform:"translateX(-50%)",background:Gold,color:BG,padding:"12px 28px",borderRadius:24,fontSize:14,fontWeight:"bold",whiteSpace:"nowrap",boxShadow:`0 4px 24px ${Gold}55`,zIndex:500}}>{toast}</div>}
     </div>
   );
