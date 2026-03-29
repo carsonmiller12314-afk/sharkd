@@ -265,7 +265,7 @@ const S = {
   FRIENDS:"friends", FRIEND_PROFILE:"friend_profile", ADD_FRIENDS:"add_friends",
   LEADERBOARD:"leaderboard", WORLD_PROFILE:"world_profile",
   GROUPS:"groups", GROUP_DETAIL:"group_detail",
-  RIVALS:"rivals", FEED:"feed",
+  RIVALS:"rivals", FEED:"feed", CHATS:"chats",
   SETTINGS:"settings", NOTIFICATIONS:"notifications",
   GAME_DETAIL:"game_detail", EDIT_GAME:"edit_game",
   CONFIRM_PAY:"confirm_pay",
@@ -491,7 +491,7 @@ function useIsMobile(){
   return mobile;
 }
 
-function SidebarNav({screen,nav,profile,debts,notifs,myGames,mobileOpen,setMobileOpen,onChatToggle,chatOpen,unreadChats,props={}}){
+function SidebarNav({screen,nav,profile,debts,notifs,myGames,mobileOpen,setMobileOpen,unreadChats}){
   const unread=notifs.filter(n=>!n.read).length;
   const pending=debts.filter(d=>d.from==="You"||d.to==="You").length;
   const myStats=deriveStats(myGames),myScore=calcScore(myStats),myRank=getRank(myScore);
@@ -507,13 +507,10 @@ function SidebarNav({screen,nav,profile,debts,notifs,myGames,mobileOpen,setMobil
     {s:S.RANK,        icon:"🦈",label:"Rank"},
     {s:S.FRIENDS,     icon:"👥",label:"Friends"},
     {s:S.LEADERBOARD, icon:"🏆",label:"Leaderboard"},
-    {s:S.GROUPS,      icon:"🎯",label:"Groups"},
-    {s:S.RIVALS,      icon:"⚔️",label:"Rivals"},
-    {s:S.FEED,        icon:"📡",label:"Feed"},
-    {s:"chat",         icon:"💬",label:"Chats",isChat:true},
+    {s:S.CHATS,       icon:"💬",label:"Chats",badge:unread},
   ];
 
-  const doNav=(s,item)=>{if(item?.isChat){if(props.onChatToggle)props.onChatToggle();if(isMobile)setMobileOpen(false);return;}nav(s);if(isMobile)setMobileOpen(false);};
+  const doNav=s=>{nav(s);if(isMobile)setMobileOpen(false);};
 
   const sidebarContent=(
     <div style={{width:240,background:Sidebar,borderRight:`1px solid ${Border}`,display:"flex",flexDirection:"column",height:"100vh"}}>
@@ -532,15 +529,13 @@ function SidebarNav({screen,nav,profile,debts,notifs,myGames,mobileOpen,setMobil
       {/* Nav items */}
       <div style={{flex:1,overflowY:"auto",padding:"10px 0"}}>
         {navItems.map(item=>{
-          const isChat=item.isChat;
-          const active=isChat?chatOpen:screen===item.s;
-          const unreadCount=isChat?Object.values(unreadChats||{}).filter(Boolean).length:0;
+          const active=screen===item.s;
+          const chatUnread=item.s===S.CHATS?Object.values(unreadChats||{}).filter(Boolean).length:0;
           return(
-            <div key={item.s||item.label} onClick={()=>isChat?(onChatToggle&&onChatToggle()):doNav(item.s,item)} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 20px",cursor:"pointer",background:active?`${Gold}15`:"transparent",borderLeft:active?`3px solid ${Gold}`:"3px solid transparent",transition:"all .15s"}}>
+            <div key={item.s} onClick={()=>doNav(item.s)} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 20px",cursor:"pointer",background:active?`${Gold}15`:"transparent",borderLeft:active?`3px solid ${Gold}`:"3px solid transparent",transition:"all .15s"}}>
               <span style={{fontSize:17,opacity:active?1:0.45}}>{item.icon}</span>
               <span style={{color:active?Gold:"#666",fontWeight:active?"bold":"normal",fontSize:14}}>{item.label}</span>
-              {item.badge>0&&<div style={{marginLeft:"auto",background:Down,borderRadius:"50%",width:18,height:18,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:"bold",color:"#fff"}}>{item.badge}</div>}
-              {isChat&&unreadCount>0&&<div style={{marginLeft:"auto",background:Gold,borderRadius:"50%",width:18,height:18,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:"bold",color:BG}}>{unreadCount}</div>}
+              {(item.badge>0||chatUnread>0)&&<div style={{marginLeft:"auto",background:item.s===S.CHATS?Gold:Down,borderRadius:"50%",width:18,height:18,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:"bold",color:item.s===S.CHATS?BG:"#fff"}}>{item.badge||chatUnread}</div>}
             </div>
           );
         })}
@@ -926,7 +921,7 @@ function HomeScreen({nav,profile,debts,notifs,myGames,setSelectedDebt}){
                 {icon:"⚡",label:"Settle Up",   s:S.SETTLEMENTS},
                 {icon:"📈",label:"My Stats",    s:S.STATS},
                 {icon:"🏆",label:"Leaderboard", s:S.LEADERBOARD},
-                {icon:"📡",label:"Friend Feed",  s:S.FEED},
+
               ].map(a=>(
                 <div key={a.s} onClick={()=>nav(a.s)} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:`${BG}`,border:`1px solid ${Border}`,borderRadius:10,cursor:"pointer",transition:"border-color .15s"}}>
                   <span style={{fontSize:18}}>{a.icon}</span>
@@ -1838,7 +1833,6 @@ function FriendsScreen({nav,profile,friends,setFriends,setSelectedFriend}){
     <MainContent isMobile={isMobile}>
       <PageHeader title="Friends" subtitle={`${friends.length} friend${friends.length!==1?"s":""}`}
         action={<div style={{display:"flex",gap:12}}>
-          <div onClick={()=>nav(S.RIVALS)} style={{padding:"10px 20px",borderRadius:10,background:"#a78bfa22",border:"1px solid #a78bfa44",color:"#a78bfa",fontWeight:"bold",fontSize:13,cursor:"pointer"}}>⚔️ Rivals</div>
           <Btn label="+ Add Friends" onClick={()=>nav(S.ADD_FRIENDS)}/>
         </div>}
       />
@@ -2337,7 +2331,7 @@ function EditGameScreen({nav,game,editGame,profile}){
 }
 
 // ─── FRIEND PROFILE ──────────────────────────────────────────────────────────
-function FriendProfileScreen({nav,friend,fromScreen,profile}){
+function FriendProfileScreen({nav,friend,fromScreen,profile,myGames}){
   const isMobile=useIsMobile();  const [tab,setTab]=useState("stats"),[chatMsg,setChatMsg]=useState(""),[chatHistory,setChatHistory]=useState({});
   useEffect(()=>{
     if(!profile?.uid||!friend?.id)return;
@@ -2379,7 +2373,7 @@ function FriendProfileScreen({nav,friend,fromScreen,profile}){
       </div>
       {/* Tabs */}
       <div style={{display:"flex",gap:8,marginBottom:20}}>
-        {[["stats","📊 Stats"],["chat","💬 Chat"]].map(([t,label])=>(
+        {[["stats","📊 Stats"],["rivals","⚔️ Head-to-Head"],["chat","💬 Chat"]].map(([t,label])=>(
           <div key={t} onClick={()=>setTab(t)} style={{padding:"9px 20px",borderRadius:10,cursor:"pointer",background:tab===t?`${friend.color}22`:Card,border:`1px solid ${tab===t?friend.color:Border}`,color:tab===t?friend.color:"#555",fontWeight:"bold",fontSize:13,transition:"all .2s"}}>{label}</div>
         ))}
       </div>
@@ -2394,6 +2388,63 @@ function FriendProfileScreen({nav,friend,fromScreen,profile}){
             </div>
           </Card2>
         )}
+        {tab==="rivals"&&(()=>{
+          const sharedGames=myGames.filter(g=>g.players&&g.players.includes(friend.name));
+          const myWins=sharedGames.filter(g=>g.net>0).length;
+          const theirWins=sharedGames.filter(g=>g.net<0).length;
+          const draws=sharedGames.filter(g=>g.net===0).length;
+          const myNetVs=sharedGames.reduce((s,g)=>s+g.net,0);
+          const myWinRate=sharedGames.length?Math.round(myWins/sharedGames.length*100):0;
+          return(
+            <Card2>
+              <SectionLabel text={`Head-to-Head vs ${friend.name}`}/>
+              {sharedGames.length===0?(
+                <div style={{textAlign:"center",padding:"32px 0"}}>
+                  <div style={{fontSize:36,marginBottom:12}}>⚔️</div>
+                  <div style={{color:"#555",fontSize:14}}>No shared games yet. Log a game together to see your rivalry!</div>
+                </div>
+              ):(
+                <>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",gap:16,alignItems:"center",marginBottom:24,textAlign:"center"}}>
+                    <div>
+                      <div style={{color:Gold,fontWeight:"bold",fontSize:36}}>{myWins}</div>
+                      <div style={{color:"#555",fontSize:12,marginTop:4}}>Your wins</div>
+                    </div>
+                    <div style={{color:"#333",fontSize:24,fontWeight:"bold"}}>vs</div>
+                    <div>
+                      <div style={{color:friend.color,fontWeight:"bold",fontSize:36}}>{theirWins}</div>
+                      <div style={{color:"#555",fontSize:12,marginTop:4}}>{friend.name}'s wins</div>
+                    </div>
+                  </div>
+                  <div style={{height:8,background:"#1a1a2e",borderRadius:4,overflow:"hidden",marginBottom:8}}>
+                    <div style={{height:"100%",width:`${myWinRate}%`,background:`linear-gradient(90deg,${Gold},${Gold}88)`,borderRadius:4,transition:"width 1s ease"}}/>
+                  </div>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:20}}>
+                    <span style={{color:Gold,fontSize:12}}>{myWinRate}% you</span>
+                    <span style={{color:friend.color,fontSize:12}}>{100-myWinRate}% {friend.name}</span>
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12}}>
+                    {[{l:"Games played",v:sharedGames.length,c:"#fff"},{l:"Your net vs them",v:`${myNetVs>=0?"+":""}$${myNetVs}`,c:myNetVs>=0?Up:Down},{l:"Draws",v:draws,c:"#555"}].map(s=>(
+                      <div key={s.l} style={{background:BG,borderRadius:12,padding:"14px",textAlign:"center"}}>
+                        <div style={{color:s.c,fontWeight:"bold",fontSize:20}}>{s.v}</div>
+                        <div style={{color:"#555",fontSize:11,marginTop:4}}>{s.l}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{marginTop:20}}>
+                    <SectionLabel text="Recent shared games"/>
+                    {sharedGames.slice(0,5).map(g=>(
+                      <div key={g.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:`1px solid ${Border}`}}>
+                        <div><div style={{color:"#fff",fontSize:14}}>{g.game}</div><div style={{color:"#555",fontSize:12}}>{g.date}</div></div>
+                        <div style={{color:g.net>=0?Up:Down,fontWeight:"bold",fontFamily:"monospace"}}>{g.net>=0?"+":""}${g.net}</div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </Card2>
+          );
+        })()}
         {tab==="chat"&&(
           <Card2>
             <SectionLabel text="Messages"/>
@@ -2417,6 +2468,103 @@ function FriendProfileScreen({nav,friend,fromScreen,profile}){
           </Card2>
         )}
       </div>
+    </MainContent>
+  );
+}
+
+// ─── CHATS SCREEN ────────────────────────────────────────────────────────────
+function ChatsScreen({friends,profile,chats,setChats,unreadChats,setUnreadChats}){
+  const isMobile=useIsMobile();
+  const [activeFriend,setActiveFriend]=useState(null);
+  const [msgInput,setMsgInput]=useState("");
+  const msgsRef=useRef(null);
+
+  const openFriend=(f)=>{
+    setActiveFriend(f);
+    setUnreadChats(prev=>({...prev,[f.id]:false}));
+    if(profile?.uid&&f?.id){
+      loadChat(profile.uid,f.id).then(msgs=>{
+        if(msgs.length>0)setChats(prev=>({...prev,[f.id]:msgs.map(m=>({...m,isMe:m.from===profile.username}))}));
+      });
+    }
+  };
+
+  const sendMsg=()=>{
+    if(!msgInput.trim()||!activeFriend)return;
+    const msg={id:Date.now(),from:profile.username||"You",msg:msgInput.trim(),time:"Just now",isMe:true,color:Gold};
+    setChats(prev=>({...prev,[activeFriend.id]:[...(prev[activeFriend.id]||[]),msg]}));
+    if(profile?.uid&&activeFriend?.id)saveChat(profile.uid,activeFriend.id,msg);
+    setMsgInput("");
+    setTimeout(()=>{if(msgsRef.current)msgsRef.current.scrollTop=msgsRef.current.scrollHeight;},50);
+  };
+
+  useEffect(()=>{
+    if(msgsRef.current)msgsRef.current.scrollTop=msgsRef.current.scrollHeight;
+  },[chats,activeFriend]);
+
+  const msgs=activeFriend?chats[activeFriend.id]||[]:[];
+
+  return(
+    <MainContent isMobile={isMobile}>
+      {!activeFriend?(
+        <>
+          <PageHeader title="Chats" subtitle="Message your friends"/>
+          {friends.length===0?(
+            <Card2 style={{textAlign:"center",padding:"48px"}}>
+              <div style={{fontSize:48,marginBottom:12}}>💬</div>
+              <div style={{color:"#555",fontSize:14}}>Add friends to start chatting!</div>
+            </Card2>
+          ):(
+            <div style={{maxWidth:600}}>
+              {friends.map(f=>{
+                const lastMsg=(chats[f.id]||[]).slice(-1)[0];
+                const hasUnread=unreadChats[f.id];
+                return(
+                  <div key={f.id} onClick={()=>openFriend(f)} style={{display:"flex",alignItems:"center",gap:14,padding:"16px 20px",background:Card,border:`1px solid ${hasUnread?Gold+"44":Border}`,borderRadius:14,marginBottom:10,cursor:"pointer",background:hasUnread?`${Gold}08`:Card}}>
+                    <div style={{position:"relative",flexShrink:0}}>
+                      <Avatar char={f.avatar} color={f.color} size={48} fontSize={20}/>
+                      {hasUnread&&<div style={{position:"absolute",top:-2,right:-2,width:12,height:12,borderRadius:"50%",background:Gold,border:`2px solid ${BG}`}}/>}
+                    </div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{color:hasUnread?"#fff":"#aaa",fontWeight:hasUnread?"bold":"normal",fontSize:15}}>{f.name}</div>
+                      <div style={{color:"#444",fontSize:12,fontFamily:"monospace",marginBottom:4}}>@{f.username}</div>
+                      <div style={{color:"#555",fontSize:13,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{lastMsg?lastMsg.msg:"Start a conversation →"}</div>
+                    </div>
+                    {hasUnread&&<div style={{width:10,height:10,borderRadius:"50%",background:Gold,flexShrink:0}}/>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      ):(
+        <div style={{display:"flex",flexDirection:"column",height:"calc(100vh - 120px)"}}>
+          <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:20}}>
+            <div onClick={()=>setActiveFriend(null)} style={{color:"#555",fontSize:20,cursor:"pointer",lineHeight:1,padding:"4px 8px"}}>←</div>
+            <Avatar char={activeFriend.avatar} color={activeFriend.color} size={40} fontSize={16}/>
+            <div>
+              <div style={{color:"#fff",fontWeight:"bold",fontSize:16}}>{activeFriend.name}</div>
+              <div style={{color:"#444",fontSize:12,fontFamily:"monospace"}}>@{activeFriend.username}</div>
+            </div>
+          </div>
+          <div ref={msgsRef} style={{flex:1,overflowY:"auto",display:"flex",flexDirection:"column",gap:12,paddingBottom:16}}>
+            {msgs.length===0&&<div style={{textAlign:"center",color:"#444",fontSize:13,marginTop:60}}>Say hi to {activeFriend.name}! 👋</div>}
+            {msgs.map((m,i)=>(
+              <div key={i} style={{display:"flex",justifyContent:m.isMe?"flex-end":"flex-start"}}>
+                <div style={{maxWidth:"65%"}}>
+                  {!m.isMe&&<div style={{color:activeFriend.color,fontSize:11,marginBottom:3,fontWeight:"bold"}}>{m.from}</div>}
+                  <div style={{background:m.isMe?`${Gold}22`:Border,border:`1px solid ${m.isMe?Gold:Border}`,borderRadius:m.isMe?"14px 14px 4px 14px":"14px 14px 14px 4px",padding:"10px 16px",color:"#fff",fontSize:14,lineHeight:1.5}}>{m.msg}</div>
+                  <div style={{color:"#333",fontSize:10,marginTop:4,textAlign:m.isMe?"right":"left"}}>{m.time}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{display:"flex",gap:10,paddingTop:12,borderTop:`1px solid ${Border}`}}>
+            <input value={msgInput} onChange={e=>setMsgInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&sendMsg()} placeholder={`Message ${activeFriend.name}...`} style={{flex:1,background:Card,border:`1px solid ${Border}`,borderRadius:24,padding:"12px 20px",color:"#fff",fontSize:14,outline:"none"}}/>
+            <div onClick={sendMsg} style={{background:`${Gold}22`,border:`1px solid ${Gold}44`,borderRadius:"50%",width:46,height:46,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",color:Gold,fontSize:20,flexShrink:0}}>→</div>
+          </div>
+        </div>
+      )}
     </MainContent>
   );
 }
@@ -2479,15 +2627,7 @@ export default function App(){
     return()=>unsub();
   },[]);
 
-  const [chatOpen,setChatOpen]=useState(false);
-  const [activeChatFriend,setActiveChatFriend]=useState(null);
   const [unreadChats,setUnreadChats]=useState({});
-
-  const openChatWith=(friend)=>{
-    setActiveChatFriend(friend);
-    setChatOpen(true);
-    setUnreadChats(prev=>({...prev,[friend.id]:false}));
-  };
 
   const nav=s=>{setPrevScreen(screen);setScreen(s);};
   const showToast=msg=>{setToast(msg);setTimeout(()=>setToast(null),2600);};
@@ -2578,7 +2718,7 @@ export default function App(){
 
   return(
     <div style={{fontFamily:"'Georgia','Times New Roman',serif",background:BG,minHeight:"100vh",display:"flex"}}>
-      <SidebarNav screen={screen} nav={nav} profile={profile} debts={debts} notifs={notifs} myGames={myGames} mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} onChatToggle={()=>setChatOpen(o=>!o)} chatOpen={chatOpen} unreadChats={unreadChats}/>
+      <SidebarNav screen={screen} nav={nav} profile={profile} debts={debts} notifs={notifs} myGames={myGames} mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} unreadChats={unreadChats}/>
       <div style={{flex:1,overflowY:"auto"}}>
         {screen===S.HOME          &&<HomeScreen          nav={nav} profile={profile} debts={debts} notifs={notifs} myGames={myGames} setSelectedDebt={setSelectedDebt}/>}
         {screen===S.NEW_GAME      &&<NewGameScreen        nav={nav} profile={profile} friends={friends} groups={groups} addGame={addGame} showToast={showToast}/>}
@@ -2590,17 +2730,17 @@ export default function App(){
         {screen===S.STATS         &&<StatsScreen          nav={nav} profile={profile} myGames={myGames} myStats={myStats} myScore={myScore} myRank={myRank}/>}
         {screen===S.RANK          &&<RankScreen           nav={nav} profile={profile} myStats={myStats} myScore={myScore} myRank={myRank} myGames={myGames}/>}
         {screen===S.FRIENDS       &&<FriendsScreen        nav={nav} profile={profile} friends={friends} setFriends={setFriends} setSelectedFriend={setSelectedFriend}/>}
-        {screen===S.FRIEND_PROFILE&&<FriendProfileScreen  nav={nav} friend={selectedFriend} fromScreen={prevScreen} profile={profile}/>}
+        {screen===S.FRIEND_PROFILE&&<FriendProfileScreen  nav={nav} friend={selectedFriend} fromScreen={prevScreen} profile={profile} myGames={myGames}/>}
         {screen===S.ADD_FRIENDS   &&<AddFriendsScreen     nav={nav} showToast={showToast} friends={friends} setFriends={setFriends} profile={profile}/>}
         {screen===S.LEADERBOARD   &&<LeaderboardScreen    nav={nav} profile={profile} friends={friends} myGames={myGames} setSelectedFriend={setSelectedFriend} setSelectedWorldPlayer={setSelectedWorldPlayer}/>}
-        {screen===S.GROUPS        &&<GroupsScreen         nav={nav} groups={groups} setGroups={setGroups} myGames={myGames} setSelectedGroup={setSelectedGroup} friends={friends}/>}
+
         {screen===S.GROUP_DETAIL  &&<GroupDetailScreen    nav={nav} group={selectedGroup} myGames={myGames} setSelectedGame={setSelectedGame} friends={friends}/>}
-        {screen===S.RIVALS        &&<RivalsScreen         nav={nav} friends={friends} myGames={myGames}/>}
-        {screen===S.FEED          &&<FeedScreen           nav={nav} feedItems={feedItems}/>}
+
+
+        {screen===S.CHATS         &&<ChatsScreen          nav={nav} friends={friends} profile={profile} chats={chats} setChats={setChats} unreadChats={unreadChats} setUnreadChats={setUnreadChats}/>}
         {screen===S.NOTIFICATIONS &&<NotificationsScreen  nav={nav} notifs={notifs} markAllRead={markAllRead} setNotifs={setNotifs} setFriends={setFriends} profile={profile} showToast={showToast}/>}
         {screen===S.SETTINGS      &&<SettingsScreen       nav={nav} profile={profile} setProfile={setProfile} showToast={showToast} onLogout={async()=>{await signOut();setPage("landing");setScreen(S.HOME);setMyGames([]);setDebts([]);setFriends([]);setNotifs([]);setFeedItems([]);setGroups([]);setProfile({username:"",avatarChar:"",avatarColor:Gold,photo:null,isPublic:true,venmo:"",uid:null});}}/>}
       </div>
-      <ChatSidebar friends={friends} profile={profile} chatOpen={chatOpen} setChatOpen={setChatOpen} activeChatFriend={activeChatFriend} setActiveChatFriend={setActiveChatFriend} unreadChats={unreadChats} setUnreadChats={setUnreadChats} chats={chats} setChats={setChats}/>
       {toast&&<div style={{position:"fixed",bottom:32,left:"50%",transform:"translateX(-50%)",background:Gold,color:BG,padding:"12px 28px",borderRadius:24,fontSize:14,fontWeight:"bold",whiteSpace:"nowrap",boxShadow:`0 4px 24px ${Gold}55`,zIndex:500}}>{toast}</div>}
     </div>
   );
